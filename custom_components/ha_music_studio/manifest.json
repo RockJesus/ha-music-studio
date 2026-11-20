@@ -1,12 +1,20 @@
 {
   "domain": "ha_music_studio",
   "name": "HA Music Studio",
-  "version": "0.3.6",
-  "documentation": "https://github.com/RockJesus/ha-music-studio",
-  "issue_tracker": "https://github.com/RockJesus/ha-music-studio/issues",
-  "codeowners": ["@RockJesus"],
+  "codeowners": [
+    "@RockJesus"
+  ],
   "config_flow": true,
-  "dependencies": ["websocket_api", "music_assistant"],
+  "dependencies": [
+    "websocket_api",
+    "music_assistant"
+  ],
+  "documentation": "https://github.com/RockJesus/ha-music-studio",
+  "integration_type": "service",
   "iot_class": "local_push",
-  "integration_type": "service"
+  "issue_tracker": "https://github.com/RockJesus/ha-music-studio/issues",
+  "categories": [
+    "multimedia"
+  ],
+  "version": "0.3.7"
 }

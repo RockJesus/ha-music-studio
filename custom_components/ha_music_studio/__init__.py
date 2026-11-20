@@ -25,12 +25,6 @@ SERVICE_CLEANUP_LEGACY = "cleanup_legacy"
 LEGACY_DOMAIN = "ha_music_analysis"
 
 
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the integration from YAML (optional)."""
-    hass.data.setdefault(DOMAIN, {})
-    return True
-
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a config entry."""
     hass.data.setdefault(DOMAIN, {})
