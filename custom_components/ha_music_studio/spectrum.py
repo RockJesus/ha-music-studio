@@ -84,9 +84,9 @@ class BandAnalyzer:
         return 0 if self._buf is None else int(self._buf.size)
 
     def feed(self, frame: bytes) -> None:
-        if len(frame) < 10 + 1024:
+        if len(frame) < 9 + 1024:
             return
-        samples = frame[10 : 10 + 1024]
+        samples = frame[9 : 9 + 1024]
         if self._np is None:
             return
         chunk = self._np.frombuffer(samples, dtype=self._np.uint8).astype(self._np.float32)
