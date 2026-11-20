@@ -190,7 +190,8 @@ class SpectrumSession:
             await ws.send_json({"type": "auth", "token": token})
             first = await ws.receive(timeout=15)
             if first.type.name != "TEXT" or "auth_ok" not in (first.data or ""):
-                raise RuntimeError("Music Assistant rejected the spectrum token")
+                detail = (first.data or "")[:80]
+                raise RuntimeError(f"Music Assistant rejected the spectrum token: {detail}")
             self.send({"type": "ready", "player": player or "auto"})
             analyzer = BandAnalyzer()
             last_push = 0.0
