@@ -7,15 +7,14 @@ import shutil
 from pathlib import Path
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
 from .diagnostics import async_register_diagnostics
-from .probe import async_register_probe
 from .lyrics import async_register_lyrics_api
+from .probe import async_register_probe
 from .spectrum import async_register_websocket_api
 
 _LOGGER = logging.getLogger(__name__)

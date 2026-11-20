@@ -4,18 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import time
 from collections.abc import Callable
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .token import async_get_viewer_token, entry_url, ma_entry
 from .const import (
     BAND_COUNT,
     DOMAIN,
@@ -26,6 +23,7 @@ from .const import (
     SAMPLE_RATE,
     WS_SUBSCRIBE,
 )
+from .token import async_get_viewer_token, entry_url, ma_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,7 +74,7 @@ class BandAnalyzer:
             freqs = np.fft.rfftfreq(FFT_SIZE, 1 / SAMPLE_RATE)
             self._freqs = freqs
             self._edges = np.geomspace(MIN_FREQ, MAX_FREQ, BAND_COUNT + 1)
-        except Exception:  # pragma: no cover - numpy is present on HAOS
+        except Exception:  # noqa: BLE001  # pragma: no cover - numpy is present on HAOS
             self._np = None
             _LOGGER.warning("numpy unavailable; spectrum falls back to RMS bands")
 
@@ -167,7 +165,7 @@ class SpectrumSession:
                 backoff = 1.0
             except asyncio.CancelledError:
                 raise
-            except Exception as err:  # noqa: BLE001
+            except Exception:
                 import traceback
 
                 _LOGGER.exception("Spectrum session failed")
@@ -231,7 +229,7 @@ class SpectrumSession:
                         continue
                     try:
                         payload = analyzer.compute()
-                    except Exception as err:  # noqa: BLE001
+                    except Exception:
                         import traceback
                         self.send({"type": "error", "message": traceback.format_exc()[-500:]})
                         _LOGGER.exception("Band computation failed")

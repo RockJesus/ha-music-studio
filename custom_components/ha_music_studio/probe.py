@@ -7,12 +7,11 @@ import time
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN
-from .spectrum import _ws_url, _player_for_entity
+from .spectrum import _player_for_entity, _ws_url
 from .token import async_get_viewer_token, entry_url, ma_entry
 
 

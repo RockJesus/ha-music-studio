@@ -12,7 +12,6 @@ from typing import Any
 from uuid import uuid4
 
 import voluptuous as vol
-
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -165,14 +164,14 @@ async def _resolve_full_track(mass: Any, item: Any) -> Any:
     if provider and item_id:
         try:
             return await mass.music.get_track(str(item_id), str(provider))
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("get_track failed: %s", err)
     uri = getattr(item, "uri", None) or getattr(track, "uri", None)
     if uri:
         try:
             return await mass.music.get_item_by_uri(str(uri))
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("get_item_by_uri failed: %s", err)
     return track
 
 
