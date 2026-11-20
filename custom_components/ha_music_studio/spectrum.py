@@ -162,8 +162,10 @@ class SpectrumSession:
             except asyncio.CancelledError:
                 raise
             except Exception as err:  # noqa: BLE001
+                import traceback
+
                 _LOGGER.exception("Spectrum session failed")
-                self.send({"type": "error", "message": str(err)[:160]})
+                self.send({"type": "error", "message": traceback.format_exc()[-450:]})
             if self._stopped:
                 return
             await asyncio.sleep(backoff)
