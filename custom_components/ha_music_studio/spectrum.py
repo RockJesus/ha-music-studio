@@ -162,7 +162,7 @@ class SpectrumSession:
             except asyncio.CancelledError:
                 raise
             except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("Spectrum session ended: %s", err.__class__.__name__)
+                _LOGGER.exception("Spectrum session failed")
                 self.send({"type": "error", "message": str(err)[:160]})
             if self._stopped:
                 return
