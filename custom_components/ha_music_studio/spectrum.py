@@ -53,7 +53,7 @@ def _player_for_entity(hass: HomeAssistant, entity_id: str | None) -> str | None
     state = hass.states.get(entity_id)
     if state is None:
         return None
-    for key in ("mass_player_id", "player_id", "ma_player_id"):
+    for key in ("mass_player_id", "player_id", "ma_player_id", "active_queue"):
         value = state.attributes.get(key)
         if isinstance(value, str) and value:
             return value
