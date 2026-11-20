@@ -56,5 +56,12 @@ async def async_get_viewer_token(hass: HomeAssistant, entry) -> str | None:
 
 
 def entry_url(entry) -> str | None:
-    """Return the MA base URL."""
-    return entry.data.get(CONF_URL)
+    """Return the MA webserver URL.
+
+    The config entry points at the Supervisor add-on port (8094); the public
+    webserver inside the add-on listens on 8095.
+    """
+    url = entry.data.get(CONF_URL)
+    if not url:
+        return None
+    return url.replace(":8094", ":8095")
