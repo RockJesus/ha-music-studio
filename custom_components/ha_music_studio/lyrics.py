@@ -250,6 +250,7 @@ class LyricsSession:
                 "progress": round(progress, 3),
                 "offset": self.offset,
                 "source": "Music Assistant",
+                "error": self._entry.get("error"),
             }
         )
 
@@ -279,8 +280,9 @@ class LyricsSession:
         except asyncio.CancelledError:
             raise
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Lyrics lookup failed: %s", err.__class__.__name__)
+            _LOGGER.warning("Lyrics lookup failed: %s", err)
             parsed = {
+                "error": f"{err.__class__.__name__}: {err}"[:240],
                 "status": "error",
                 "lines": [],
                 "plain": [],
