@@ -214,21 +214,31 @@ class SpectrumSession:
             self.send({"type": "ready", "player": player or "auto"})
             analyzer = BandAnalyzer()
             last_push = 0.0
+            waves = 0
+            texts: list[str] = []
             async for msg in ws:
                 if msg.type.name == "BINARY":
                     if msg.data and msg.data[0] == WAVE_TAG:
                         analyzer.feed(msg.data)
+                        waves += 1
+                        if waves == 1:
+                            self.send({"type": "debug", "message": "first wave frame"})
                 elif msg.type.name == "TEXT":
-                    _LOGGER.debug("MA visualizer: %s", str(msg.data)[:160])
+                    text = str(msg.data)[:180]
+                    texts.append(text)
+                    self.send({"type": "ma_text", "message": text})
                 now = time.monotonic()
                 if now - last_push >= FRAME_INTERVAL:
                     payload = analyzer.compute()
                     if payload:
                         payload["type"] = "spectrum"
                         payload["ts"] = now
+                        payload["frames"] = waves
                         self.send(payload)
                     last_push = now
-            raise RuntimeError("Music Assistant visualizer closed the stream")
+            raise RuntimeError(
+                f"Music Assistant visualizer closed the stream code={ws.close_code} texts={texts[-3:]} waves={waves}"
+            )
 
 
 async def _async_subscribe(
