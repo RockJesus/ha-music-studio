@@ -341,7 +341,17 @@ class LyricsSession:
             return
         try:
             async with asyncio.timeout(30):
-                lyrics, lrc_lyrics = await _fetch_lyrics_ws(self.hass, entry, track)
+                result = await mass.send_command(
+                    "metadata/get_track_lyrics", track=track, require_schema=101
+                )
+            if isinstance(result, (list, tuple)):
+                lyrics = result[0] if len(result) > 0 else None
+                lrc_lyrics = result[1] if len(result) > 1 else None
+            elif isinstance(result, dict):
+                lyrics = result.get("lyrics")
+                lrc_lyrics = result.get("lrc_lyrics")
+            else:
+                lyrics, lrc_lyrics = None, None
             parsed = _build_entry(lyrics, lrc_lyrics)
             parsed["title"] = title
             parsed["artist"] = artist
