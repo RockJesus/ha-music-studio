@@ -133,10 +133,13 @@ class BandAnalyzer:
 class SpectrumSession:
     """One MA relay connection feeding one HA websocket subscriber."""
 
-    def __init__(self, hass: HomeAssistant, entity_id: str | None, send) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entity_id: str | None, send, player: str | None = None
+    ) -> None:
         self.hass = hass
         self.entity_id = entity_id
         self.send = send
+        self.requested_player = player
         self._task: asyncio.Task | None = None
         self._stopped = False
 
@@ -181,7 +184,7 @@ class SpectrumSession:
         base = entry_url(entry)
         if not base:
             raise RuntimeError("No Music Assistant URL available")
-        player = _player_for_entity(self.hass, self.entity_id)
+        player = _player_for_entity(self.hass, self.entity_id) or self.requested_player
         mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
         if not player and mass is not None:
             try:
@@ -228,8 +231,10 @@ class SpectrumSession:
             raise RuntimeError("Music Assistant visualizer closed the stream")
 
 
-async def _async_subscribe(hass: HomeAssistant, entity_id: str | None, send: Callable) -> Callable:
-    session = SpectrumSession(hass, entity_id, send)
+async def _async_subscribe(
+    hass: HomeAssistant, entity_id: str | None, send: Callable, player: str | None = None
+) -> Callable:
+    session = SpectrumSession(hass, entity_id, send, player)
     await session.start()
 
     @callback
@@ -256,7 +261,7 @@ async def websocket_subscribe(hass: HomeAssistant, connection, msg) -> None:
         connection.send_message(websocket_api.event_message(msg["id"], payload))
 
     try:
-        unsubscribe = await _async_subscribe(hass, entity_id, send)
+        unsubscribe = await _async_subscribe(hass, entity_id, send, msg.get("player"))
     except Exception as err:  # noqa: BLE001
         connection.send_error(msg["id"], "subscribe_failed", str(err)[:160])
         return
