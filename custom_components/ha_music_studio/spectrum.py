@@ -12,10 +12,10 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components import websocket_api
-from homeassistant.const import CONF_TOKEN, CONF_URL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .token import async_get_viewer_token, entry_url, ma_entry
 from .const import (
     BAND_COUNT,
     DOMAIN,
@@ -30,37 +30,6 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 WAVE_TAG = 22
-
-
-def _ma_entry(hass: HomeAssistant):
-    """Return the loaded Music Assistant config entry, if any."""
-    for entry in hass.config_entries.async_entries("music_assistant"):
-        if entry.state.name == "LOADED":
-            return entry
-    return None
-
-
-def _entry_token(entry) -> str | None:
-    """Read the MA token without ever logging it."""
-    token = entry.data.get(CONF_TOKEN)
-    if token:
-        return token
-    # Add-on installs may keep the token on the runtime client instead.
-    mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
-    conn = getattr(mass, "connection", None)
-    value = getattr(conn, "auth_token", None)
-    if isinstance(value, str) and value:
-        return value
-    for attr in ("token", "_token"):
-        value = getattr(mass, attr, None)
-        if isinstance(value, str) and value:
-            return value
-    auth = getattr(mass, "auth", None)
-    for attr in ("token", "_token"):
-        value = getattr(auth, attr, None)
-        if isinstance(value, str) and value:
-            return value
-    return None
 
 
 def _ws_url(url: str, player: str | None) -> str:
@@ -201,13 +170,13 @@ class SpectrumSession:
             backoff = min(10.0, backoff * 1.6)
 
     async def _connect_once(self) -> None:
-        entry = _ma_entry(self.hass)
+        entry = ma_entry(self.hass)
         if entry is None:
             raise RuntimeError("Music Assistant integration is not loaded")
-        token = _entry_token(entry)
+        token = await async_get_viewer_token(self.hass, entry)
         if not token:
             raise RuntimeError("No Music Assistant token available")
-        base = entry.data.get(CONF_URL)
+        base = entry_url(entry)
         if not base:
             raise RuntimeError("No Music Assistant URL available")
         player = _player_for_entity(self.hass, self.entity_id)
