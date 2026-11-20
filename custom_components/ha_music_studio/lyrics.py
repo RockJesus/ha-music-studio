@@ -9,15 +9,17 @@ import re
 import time
 from collections.abc import Callable
 from typing import Any
+from uuid import uuid4
 
 import voluptuous as vol
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, WS_LYRICS_SUBSCRIBE
 from .spectrum import _player_for_entity
-from .token import ma_entry
+from .token import async_get_viewer_token, entry_url, ma_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -99,6 +101,58 @@ def _build_entry(lyrics: str | None, lrc_lyrics: str | None) -> dict[str, Any]:
     if plain:
         return {"status": "ready", "lines": [], "plain": plain, "synced": False}
     return {"status": "none", "lines": [], "plain": [], "synced": False}
+
+
+def _ma_ws_url(url: str) -> str:
+    base = url.rstrip("/")
+    if base.startswith("https://"):
+        base = "wss://" + base[len("https://") :]
+    elif base.startswith("http://"):
+        base = "ws://" + base[len("http://") :]
+    elif not base.startswith(("ws://", "wss://")):
+        base = "ws://" + base
+    return base + "/ws"
+
+
+async def _fetch_lyrics_ws(hass: HomeAssistant, entry: Any, track: Any) -> tuple[str | None, str | None]:
+    """Call Music Assistant's metadata command directly over its WebSocket API."""
+    token = await async_get_viewer_token(hass, entry)
+    base = entry_url(entry)
+    if not token or not base:
+        raise RuntimeError("Music Assistant token or URL unavailable")
+    if hasattr(track, "to_dict"):
+        track_data = track.to_dict()
+    elif isinstance(track, dict):
+        track_data = track
+    else:
+        raise TypeError(f"Unsupported track payload: {type(track).__name__}")
+    session = async_get_clientsession(hass, verify_ssl=False)
+    async with session.ws_connect(_ma_ws_url(base), heartbeat=25, ssl=False, timeout=20) as ws:
+        await ws.receive_json(timeout=10)  # server info
+        auth_id = uuid4().hex
+        await ws.send_json({"message_id": auth_id, "command": "auth", "args": {"token": token}})
+        auth = await ws.receive_json(timeout=15)
+        if not auth.get("success"):
+            raise RuntimeError(str(auth.get("error") or "Music Assistant auth failed")[:160])
+        command_id = uuid4().hex
+        await ws.send_json(
+            {
+                "message_id": command_id,
+                "command": "metadata/get_track_lyrics",
+                "args": {"track": track_data},
+            }
+        )
+        reply = await ws.receive_json(timeout=30)
+        if not reply.get("success"):
+            raise RuntimeError(str(reply.get("error") or "Music Assistant lyrics lookup failed")[:160])
+        result = reply.get("result")
+        if isinstance(result, (list, tuple)):
+            lyrics = result[0] if len(result) > 0 else None
+            lrc = result[1] if len(result) > 1 else None
+            return lyrics, lrc
+        if isinstance(result, dict):
+            return result.get("lyrics"), result.get("lrc_lyrics")
+    return None, None
 
 
 async def _resolve_full_track(mass: Any, item: Any) -> Any:
@@ -286,8 +340,8 @@ class LyricsSession:
         if mass is None:
             return
         try:
-            async with asyncio.timeout(25):
-                lyrics, lrc_lyrics = await mass.metadata.get_track_lyrics(track)
+            async with asyncio.timeout(30):
+                lyrics, lrc_lyrics = await _fetch_lyrics_ws(self.hass, entry, track)
             parsed = _build_entry(lyrics, lrc_lyrics)
             parsed["title"] = title
             parsed["artist"] = artist
