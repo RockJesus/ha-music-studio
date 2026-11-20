@@ -80,6 +80,9 @@ class BandAnalyzer:
             self._np = None
             _LOGGER.warning("numpy unavailable; spectrum falls back to RMS bands")
 
+    def buffer_size(self) -> int:
+        return 0 if self._buf is None else int(self._buf.size)
+
     def feed(self, frame: bytes) -> None:
         if len(frame) < 10 + 1024:
             return
@@ -213,29 +216,61 @@ class SpectrumSession:
                 raise RuntimeError(f"Music Assistant rejected the spectrum token: {str(first.data)[:80]}")
             self.send({"type": "ready", "player": player or "auto"})
             analyzer = BandAnalyzer()
-            last_push = 0.0
             waves = 0
             texts: list[str] = []
-            async for msg in ws:
-                if msg.type.name == "BINARY":
-                    if msg.data and msg.data[0] == WAVE_TAG:
-                        analyzer.feed(msg.data)
-                        waves += 1
-                        if waves == 1:
-                            self.send({"type": "debug", "message": "first wave frame"})
-                elif msg.type.name == "TEXT":
-                    text = str(msg.data)[:180]
-                    texts.append(text)
-                    self.send({"type": "ma_text", "message": text})
-                now = time.monotonic()
-                if now - last_push >= FRAME_INTERVAL:
-                    payload = analyzer.compute()
+            last_debug = 0.0
+            stop = asyncio.Event()
+
+            async def pump() -> None:
+                nonlocal last_debug
+                last_push = 0.0
+                while not stop.is_set():
+                    await asyncio.sleep(FRAME_INTERVAL)
+                    now = time.monotonic()
+                    if now - last_push < FRAME_INTERVAL:
+                        continue
+                    try:
+                        payload = analyzer.compute()
+                    except Exception as err:  # noqa: BLE001
+                        import traceback
+                        self.send({"type": "error", "message": traceback.format_exc()[-500:]})
+                        _LOGGER.exception("Band computation failed")
+                        return
                     if payload:
                         payload["type"] = "spectrum"
                         payload["ts"] = now
                         payload["frames"] = waves
                         self.send(payload)
                     last_push = now
+                    if now - last_debug >= 5.0:
+                        last_debug = now
+                        self.send(
+                            {
+                                "type": "debug",
+                                "message": f"waves={waves} buf={analyzer.buffer_size()}",
+                            }
+                        )
+
+            pump_task = self.hass.async_create_task(pump())
+            try:
+                async for msg in ws:
+                    if msg.type.name == "BINARY":
+                        if msg.data and msg.data[0] == WAVE_TAG:
+                            analyzer.feed(msg.data)
+                            waves += 1
+                            if waves == 1:
+                                self.send({"type": "debug", "message": "first wave frame"})
+                    elif msg.type.name == "TEXT":
+                        text = str(msg.data)[:180]
+                        texts.append(text)
+                        self.send({"type": "ma_text", "message": text})
+            finally:
+                stop.set()
+                pump_task.cancel()
+                try:
+                    await pump_task
+                except asyncio.CancelledError:
+                    pass
             raise RuntimeError(
                 f"Music Assistant visualizer closed the stream code={ws.close_code} texts={texts[-3:]} waves={waves}"
             )
