@@ -342,7 +342,7 @@ class LyricsSession:
         try:
             async with asyncio.timeout(30):
                 result = await mass.send_command(
-                    "metadata/get_track_lyrics", track=track, require_schema=101
+                    "metadata/get_track_lyrics", track=track
                 )
             if isinstance(result, (list, tuple)):
                 lyrics = result[0] if len(result) > 0 else None
