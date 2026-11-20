@@ -32,7 +32,7 @@ async def async_register_diagnostics(hass: HomeAssistant) -> None:
             out["players"] = [
                 {
                     "id": p.player_id,
-                    "name": p.display_name,
+                    "name": getattr(p, "display_name", None) or getattr(p, "name", None) or p.player_id,
                     "state": str(getattr(p, "state", None)),
                     "value": str(getattr(getattr(p, "state", None), "value", None)),
                 }
