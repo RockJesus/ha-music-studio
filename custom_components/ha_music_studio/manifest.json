@@ -1,7 +1,7 @@
 {
   "domain": "ha_music_studio",
   "name": "HA Music Studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "documentation": "https://github.com/RockJesus/ha-music-studio",
   "issue_tracker": "https://github.com/RockJesus/ha-music-studio/issues",
   "codeowners": ["@RockJesus"],
