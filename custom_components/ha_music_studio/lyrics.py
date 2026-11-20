@@ -101,6 +101,27 @@ def _build_entry(lyrics: str | None, lrc_lyrics: str | None) -> dict[str, Any]:
     return {"status": "none", "lines": [], "plain": [], "synced": False}
 
 
+async def _resolve_full_track(mass: Any, item: Any) -> Any:
+    """Return a full Track with metadata, upgrading queue mappings when needed."""
+    track = getattr(item, "media_item", None) or getattr(item, "track", None) or item
+    if hasattr(track, "metadata"):
+        return track
+    provider = getattr(track, "provider", None) or getattr(item, "provider", None)
+    item_id = getattr(track, "item_id", None) or getattr(item, "item_id", None)
+    if provider and item_id:
+        try:
+            return await mass.music.get_track(str(item_id), str(provider))
+        except Exception:  # noqa: BLE001
+            pass
+    uri = getattr(item, "uri", None) or getattr(track, "uri", None)
+    if uri:
+        try:
+            return await mass.music.get_item_by_uri(str(uri))
+        except Exception:  # noqa: BLE001
+            pass
+    return track
+
+
 class LyricsSession:
     """Push the current track's lyrics and active line over HA WebSocket."""
 
@@ -186,7 +207,7 @@ class LyricsSession:
             self._entry = None
             self.send({"type": "lyrics", "status": "idle", "lines": [], "plain": []})
             return
-        track = getattr(item, "media_item", None) or getattr(item, "track", None) or item
+        track = await _resolve_full_track(mass, item)
         key = _track_key(track)
         title = str(getattr(track, "name", None) or getattr(item, "name", None) or "")
         artist = _artist_text(track)
@@ -250,7 +271,7 @@ class LyricsSession:
                 "progress": round(progress, 3),
                 "offset": self.offset,
                 "source": "Music Assistant",
-                "error": self._entry.get("error"),
+                "errmsg": str(self._entry.get("error") or ""),
             }
         )
 
