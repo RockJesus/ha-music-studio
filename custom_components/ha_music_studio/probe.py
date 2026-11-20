@@ -16,14 +16,14 @@ from .spectrum import _ws_url, _player_for_entity
 from .token import async_get_viewer_token, entry_url, ma_entry
 
 
-def _queue_info(hass: HomeAssistant, player: str) -> dict[str, Any]:
+async def _queue_info(hass: HomeAssistant, player: str) -> dict[str, Any]:
     """Return MA queue internals for a player, defensively."""
     entry = ma_entry(hass)
     mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
     if mass is None:
         return {"error": "Music Assistant client unavailable"}
     try:
-        queue = mass.player_queues.get_active_queue(player)
+        queue = await mass.player_queues.get_active_queue(player)
     except Exception as err:  # noqa: BLE001
         return {"error": f"{err.__class__.__name__}: {err}"}
     if queue is None:
@@ -68,7 +68,7 @@ async def async_register_probe(hass: HomeAssistant) -> None:
         out: dict[str, Any] = {
             "player": target,
             "url": _ws_url(base, target),
-            "queue_before": _queue_info(hass, target),
+            "queue_before": await _queue_info(hass, target),
         }
         counts: dict[str, int] = {}
         texts: list[str] = []
@@ -115,7 +115,7 @@ async def async_register_probe(hass: HomeAssistant) -> None:
                 "first_binary": first_binary,
                 "text_count": len(texts),
                 "texts": texts[:12],
-                "queue_after": _queue_info(hass, target),
+                "queue_after": await _queue_info(hass, target),
                 "close_code": getattr(ws, "close_code", None) if "ws" in locals() else None,
             }
         )
