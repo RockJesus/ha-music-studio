@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 from .diagnostics import async_register_diagnostics
+from .probe import async_register_probe
 from .spectrum import async_register_websocket_api
 
 _LOGGER = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     async_register_websocket_api(hass)
     await async_register_diagnostics(hass)
+    await async_register_probe(hass)
     _LOGGER.info("HA Music Studio started")
     return True
 
