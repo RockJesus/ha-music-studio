@@ -182,6 +182,16 @@ class SpectrumSession:
         if not base:
             raise RuntimeError("No Music Assistant URL available")
         player = _player_for_entity(self.hass, self.entity_id)
+        mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
+        if not player and mass is not None:
+            try:
+                for candidate in mass.players.players:
+                    state = str(getattr(candidate, "state", "")).lower()
+                    if "playing" in state:
+                        player = candidate.player_id
+                        break
+            except Exception:  # noqa: BLE001
+                player = None
         session = async_get_clientsession(self.hass, verify_ssl=False)
         async with session.ws_connect(
             _ws_url(base, player),
@@ -204,6 +214,8 @@ class SpectrumSession:
                 if msg.type.name == "BINARY":
                     if msg.data and msg.data[0] == WAVE_TAG:
                         analyzer.feed(msg.data)
+                elif msg.type.name == "TEXT":
+                    _LOGGER.debug("MA visualizer: %s", str(msg.data)[:160])
                 now = time.monotonic()
                 if now - last_push >= FRAME_INTERVAL:
                     payload = analyzer.compute()
