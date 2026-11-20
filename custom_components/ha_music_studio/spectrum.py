@@ -47,6 +47,10 @@ def _entry_token(entry) -> str | None:
         return token
     # Add-on installs may keep the token on the runtime client instead.
     mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
+    conn = getattr(mass, "connection", None)
+    value = getattr(conn, "auth_token", None)
+    if isinstance(value, str) and value:
+        return value
     for attr in ("token", "_token"):
         value = getattr(mass, attr, None)
         if isinstance(value, str) and value:
