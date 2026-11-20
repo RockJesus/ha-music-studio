@@ -29,6 +29,18 @@ async def async_register_diagnostics(hass: HomeAssistant) -> None:
             "conn_token_prefix": str(getattr(conn, "auth_token", None))[:12],
         }
         try:
+            out["players"] = [
+                {
+                    "id": p.player_id,
+                    "name": p.display_name,
+                    "state": str(getattr(p, "state", None)),
+                    "value": str(getattr(getattr(p, "state", None), "value", None)),
+                }
+                for p in mass.players.players
+            ]
+        except Exception as err:  # noqa: BLE001
+            out["players_error"] = f"{err.__class__.__name__}: {err}"
+        try:
             token = await mass.auth.create_token("HA Music Studio Diag")
             out["created_type"] = type(token).__name__
             out["created_len"] = len(token) if hasattr(token, "__len__") else None

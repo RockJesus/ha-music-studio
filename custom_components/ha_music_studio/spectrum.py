@@ -186,8 +186,9 @@ class SpectrumSession:
         if not player and mass is not None:
             try:
                 for candidate in mass.players.players:
-                    state = str(getattr(candidate, "state", "")).lower()
-                    if "playing" in state:
+                    state = getattr(candidate, "state", None)
+                    value = getattr(state, "value", state)
+                    if str(value).lower() in ("playing", "playerstate.playing"):
                         player = candidate.player_id
                         break
             except Exception:  # noqa: BLE001
