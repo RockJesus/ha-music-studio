@@ -8,6 +8,7 @@ Home Assistant custom integration that taps Music Assistant's real-time PCM wave
 - Reuses the Music Assistant token already stored by Home Assistant; no token is written to this repository.
 - Collapses the 200–300 fps PCM feed into **30 fps, 48 log-spaced bands**.
 - Pushes the bands over a Home Assistant WebSocket command: `ha_music_studio/subscribe`.
+- Fetches the current track's lyrics through Music Assistant's native `metadata/get_track_lyrics`, parses LRC, and pushes synchronized lines plus the active line index over `ha_music_studio/subscribe_lyrics`.
 
 ## Requirements
 
@@ -19,4 +20,4 @@ Home Assistant custom integration that taps Music Assistant's real-time PCM wave
 
 Install through Marketplace as an `integration`, restart Home Assistant, then add **HA Music Studio** in Settings → Devices & Services.
 
-The frontend card subscribes automatically when this integration is loaded. If it is missing, the card falls back to its built-in visualizer.
+The `ha-music` card subscribes automatically when this integration is loaded. Without it, the card keeps playback controls but shows no live spectrum or backend lyrics.

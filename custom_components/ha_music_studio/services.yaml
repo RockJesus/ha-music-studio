@@ -1,0 +1,10 @@
+cleanup_legacy:
+  name: Remove retired analysis component
+  description: Deletes the obsolete custom_components/ha_music_analysis directory. This is destructive and requires confirm true.
+  fields:
+    confirm:
+      name: Confirm
+      description: Must be true to delete the directory.
+      required: true
+      selector:
+        boolean:
