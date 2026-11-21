@@ -100,11 +100,23 @@ def _item_list(
     return normalized
 
 
+def _queue_count(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, (list, tuple, dict)):
+        return len(value)
+    return 0
+
+
 async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
     queue = await mass.send_command("player_queues/get", {"queue_id": queue_id})
+    if isinstance(queue, dict) and isinstance(queue.get(queue_id), dict):
+        queue = queue[queue_id]
     if not isinstance(queue, dict):
         return {"queue_id": queue_id, "items": [], "total": 0, "offset": 0}
-    total = int(queue.get("items") or 0)
+    total = _queue_count(queue.get("items"))
     current_index = queue.get("current_index")
     current_index = int(current_index) if isinstance(current_index, int) else -1
     start = 0
