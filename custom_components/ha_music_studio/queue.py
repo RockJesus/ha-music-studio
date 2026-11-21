@@ -112,7 +112,7 @@ def _queue_count(value: Any) -> int:
 
 async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
     try:
-        queue = await mass.send_command("player_queues/get", {"queue_id": queue_id})
+        queue = await mass.send_command("player_queues/get", queue_id=queue_id)
     except Exception as err:
         raise RuntimeError(f"player_queues/get: {err}") from err
     if isinstance(queue, dict) and isinstance(queue.get(queue_id), dict):
@@ -132,8 +132,7 @@ async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
     if limit:
         try:
             page = await mass.send_command(
-                "player_queues/items",
-                {"queue_id": queue_id, "limit": limit, "offset": start},
+                "player_queues/items", queue_id=queue_id, limit=limit, offset=start
             )
         except Exception as err:
             raise RuntimeError(f"player_queues/items: {err}") from err
@@ -278,46 +277,48 @@ async def async_register_queue_api(hass: HomeAssistant) -> None:
                 if not msg.get("item_id"):
                     raise ValueError("item_id is required")
                 result = await mass.send_command(
-                    "player_queues/play_index",
-                    {"queue_id": queue_id, "index": msg["item_id"]},
+                    "player_queues/play_index", queue_id=queue_id, index=msg["item_id"]
                 )
             elif action == "move_item":
                 result = await mass.send_command(
                     "player_queues/move_item",
-                    {
-                        "queue_id": queue_id,
-                        "queue_item_id": msg.get("item_id", ""),
-                        "pos_shift": int(msg.get("pos_shift") or 0),
-                    },
+                    queue_id=queue_id,
+                    queue_item_id=msg.get("item_id", ""),
+                    pos_shift=int(msg.get("pos_shift") or 0),
                 )
             elif action == "remove_item":
                 result = await mass.send_command(
                     "player_queues/delete_item",
-                    {"queue_id": queue_id, "item_id_or_index": msg.get("item_id_or_index")},
+                    queue_id=queue_id,
+                    item_id_or_index=msg.get("item_id_or_index"),
                 )
             elif action == "clear":
                 result = await mass.send_command(
                     "player_queues/clear",
-                    {"queue_id": queue_id, "skip_stop": bool(msg.get("keep_playing"))},
+                    queue_id=queue_id,
+                    skip_stop=bool(msg.get("keep_playing")),
                 )
             elif action == "shuffle":
                 result = await mass.send_command(
                     "player_queues/shuffle",
-                    {"queue_id": queue_id, "shuffle_enabled": bool(msg.get("shuffle"))},
+                    queue_id=queue_id,
+                    shuffle_enabled=bool(msg.get("shuffle")),
                 )
             elif action == "repeat":
                 result = await mass.send_command(
                     "player_queues/repeat",
-                    {"queue_id": queue_id, "repeat_mode": str(msg.get("repeat") or "off")},
+                    queue_id=queue_id,
+                    repeat_mode=str(msg.get("repeat") or "off"),
                 )
             elif action in ("play", "pause", "next", "previous", "play_pause", "stop"):
                 result = await mass.send_command(
-                    f"player_queues/{action}", {"queue_id": queue_id}
+                    f"player_queues/{action}", queue_id=queue_id
                 )
             elif action == "seek":
                 result = await mass.send_command(
                     "player_queues/seek",
-                    {"queue_id": queue_id, "position": float(msg.get("position") or 0)},
+                    queue_id=queue_id,
+                    position=float(msg.get("position") or 0),
                 )
             else:
                 raise ValueError(f"unknown queue action: {action}")
