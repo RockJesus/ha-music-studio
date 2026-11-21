@@ -81,7 +81,7 @@ def _detect_effect(config: dict[str, Any]) -> str:
 
 async def _save(mass: Any, player_id: str, config: dict[str, Any]) -> dict[str, Any]:
     result = await mass.send_command(
-        "config/players/dsp/save", {"player_id": player_id, "config": config}
+        "config/players/dsp/save", player_id=player_id, config=config
     )
     return _as_dict(result)
 
@@ -113,7 +113,7 @@ async def async_register_effects_api(hass: HomeAssistant) -> None:
         baselines = hass.data[DOMAIN].setdefault("dsp_baseline", {})
         try:
             current = _as_dict(
-                await mass.send_command("config/players/dsp/get", {"player_id": player_id})
+                await mass.send_command("config/players/dsp/get", player_id=player_id)
             )
             action = str(msg["action"])
             if action == "get":
