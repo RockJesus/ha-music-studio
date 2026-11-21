@@ -13,7 +13,7 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DOMAIN, WS_QUEUE_COMMAND, WS_QUEUE_SUBSCRIBE
+from .const import DOMAIN, WS_PLAYER_GROUP, WS_QUEUE_COMMAND, WS_QUEUE_SUBSCRIBE
 from .protocol import envelope
 from .token import ma_entry
 
@@ -427,4 +427,62 @@ async def async_register_queue_api(hass: HomeAssistant) -> None:
 
     websocket_api.async_register_command(hass, websocket_subscribe_queue)
     websocket_api.async_register_command(hass, websocket_queue_command)
+
+    @websocket_api.websocket_command(
+        {
+            vol.Required("type"): WS_PLAYER_GROUP,
+            vol.Required("action"): vol.In(["players", "set_members"]),
+            vol.Optional("target_player"): str,
+            vol.Optional("add"): [str],
+            vol.Optional("remove"): [str],
+        }
+    )
+    @websocket_api.async_response
+    async def websocket_player_group(hass: HomeAssistant, connection, msg) -> None:
+        entry = ma_entry(hass)
+        mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
+        if mass is None:
+            connection.send_error(msg["id"], "ma_unavailable", "Music Assistant client unavailable")
+            return
+        action = str(msg["action"])
+        try:
+            if action == "players":
+                players = []
+                for player in mass.players.players:
+                    players.append(
+                        {
+                            "player_id": str(getattr(player, "player_id", "")),
+                            "name": str(getattr(player, "name", "") or getattr(player, "default_name", "")),
+                            "available": bool(getattr(player, "available", True)),
+                            "powered": getattr(player, "powered", None),
+                            "state": str(_enum_value(getattr(player, "playback_state", None), "unknown")),
+                            "volume_level": getattr(player, "volume_level", None),
+                            "volume_muted": bool(getattr(player, "volume_muted", False)),
+                            "group_members": list(getattr(player, "group_members", []) or []),
+                            "can_group_with": list(getattr(player, "can_group_with", []) or []),
+                            "active_group": getattr(player, "active_group", None),
+                            "synced_to": getattr(player, "synced_to", None),
+                            "active_source": getattr(player, "active_source", None),
+                            "active_queue": getattr(player, "active_source", None),
+                        }
+                    )
+                connection.send_result(msg["id"], {"ok": True, "action": action, "players": players})
+                return
+            if action == "set_members":
+                target = str(msg.get("target_player") or "")
+                if not target:
+                    raise ValueError("target_player is required")
+                await mass.players.set_members(
+                    target,
+                    player_ids_to_add=list(msg.get("add") or []),
+                    player_ids_to_remove=list(msg.get("remove") or []),
+                )
+                connection.send_result(msg["id"], {"ok": True, "action": action, "target_player": target})
+                return
+            raise ValueError(f"unknown player action: {action}")
+        except Exception as err:  # noqa: BLE001
+            connection.send_error(msg["id"], "player_group_failed", str(err)[:160])
+
+    websocket_api.async_register_command(hass, websocket_player_group)
+
     hass.data[f"{DOMAIN}_queue_ws"] = True

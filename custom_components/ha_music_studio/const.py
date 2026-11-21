@@ -6,6 +6,7 @@ WS_SUBSCRIBE = "ha_music_studio/subscribe"
 WS_LYRICS_SUBSCRIBE = "ha_music_studio/subscribe_lyrics"
 WS_QUEUE_SUBSCRIBE = "ha_music_studio/subscribe_queue"
 WS_QUEUE_COMMAND = "ha_music_studio/queue_command"
+WS_PLAYER_GROUP = "ha_music_studio/player_group"
 
 # Target output rate. The MA relay can emit 200-300 waveform frames per second;
 # we deliberately collapse them to a small, steady stream for the frontend.
