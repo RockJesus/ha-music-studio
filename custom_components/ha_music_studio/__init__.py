@@ -18,6 +18,7 @@ from .lyrics import async_register_lyrics_api
 from .probe import async_register_probe
 from .queue import async_register_queue_api
 from .spectrum import async_register_websocket_api
+from .webplayer import async_register_web_player_api
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_register_effects_api(hass)
     await async_register_diagnostics(hass)
     await async_register_probe(hass)
+    await async_register_web_player_api(hass, entry)
     _register_cleanup_service(hass)
     _LOGGER.info("HA Music Studio started")
     return True
