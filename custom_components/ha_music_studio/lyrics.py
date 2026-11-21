@@ -17,6 +17,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, WS_LYRICS_SUBSCRIBE
+from .protocol import envelope
 from .spectrum import _player_for_entity
 from .token import async_get_viewer_token, entry_url, ma_entry
 
@@ -411,7 +412,7 @@ async def websocket_subscribe_lyrics(hass: HomeAssistant, connection, msg) -> No
 
     @callback
     def send(payload: dict) -> None:
-        connection.send_message(websocket_api.event_message(msg["id"], payload))
+        connection.send_message(websocket_api.event_message(msg["id"], envelope(payload)))
 
     try:
         unsubscribe = await _async_subscribe(

@@ -23,6 +23,7 @@ from .const import (
     SAMPLE_RATE,
     WS_SUBSCRIBE,
 )
+from .protocol import envelope
 from .token import async_get_viewer_token, entry_url, ma_entry
 
 _LOGGER = logging.getLogger(__name__)
@@ -301,7 +302,7 @@ async def websocket_subscribe(hass: HomeAssistant, connection, msg) -> None:
 
     @callback
     def send(payload: dict) -> None:
-        connection.send_message(websocket_api.event_message(msg["id"], payload))
+        connection.send_message(websocket_api.event_message(msg["id"], envelope(payload)))
 
     try:
         unsubscribe = await _async_subscribe(hass, entity_id, send, msg.get("player"))

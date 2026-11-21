@@ -10,6 +10,14 @@ Home Assistant custom integration that taps Music Assistant's real-time PCM wave
 - Pushes the bands over a Home Assistant WebSocket command: `ha_music_studio/subscribe`.
 - Fetches the current track's lyrics through Music Assistant's native `metadata/get_track_lyrics`, parses LRC, and pushes synchronized lines plus the active line index over `ha_music_studio/subscribe_lyrics`.
 
+## Compatibility
+
+| HA Music Studio | ha-music card | Protocol |
+|---|---|---|
+| `v0.3.9` and newer | `v2.13.0` and newer | `1` |
+
+Upgrade the integration first, then the card. Every WebSocket event carries a `protocol` field; clients must reject a different version instead of rendering stale data.
+
 ## Requirements
 
 - Home Assistant with the Music Assistant integration configured.
