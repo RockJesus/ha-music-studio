@@ -9,12 +9,13 @@ Home Assistant custom integration that taps Music Assistant's real-time PCM wave
 - Collapses the 200–300 fps PCM feed into **30 fps, 48 log-spaced bands**.
 - Pushes the bands over a Home Assistant WebSocket command: `ha_music_studio/subscribe`.
 - Fetches the current track's lyrics through Music Assistant's native `metadata/get_track_lyrics`, parses LRC, and pushes synchronized lines plus the active line index over `ha_music_studio/subscribe_lyrics`.
+- Owns the Music Assistant queue: bounded queue windows over `ha_music_studio/subscribe_queue`, and queue control (play item, move, remove, clear, shuffle, repeat, transport, seek) over `ha_music_studio/queue_command`. Cards no longer need Supervisor ingress, `mass_queue`, or a local MA websocket.
 
 ## Compatibility
 
 | HA Music Studio | ha-music card | Protocol |
 |---|---|---|
-| `v0.3.9` and newer | `v2.13.0` and newer | `1` |
+| `v0.4.0` and newer | `v2.14.0` and newer | `1` |
 
 Upgrade the integration first, then the card. Every WebSocket event carries a `protocol` field; clients must reject a different version instead of rendering stale data.
 
