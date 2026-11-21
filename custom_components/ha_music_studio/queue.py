@@ -111,7 +111,10 @@ def _queue_count(value: Any) -> int:
 
 
 async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
-    queue = await mass.send_command("player_queues/get", {"queue_id": queue_id})
+    try:
+        queue = await mass.send_command("player_queues/get", {"queue_id": queue_id})
+    except Exception as err:
+        raise RuntimeError(f"player_queues/get: {err}") from err
     if isinstance(queue, dict) and isinstance(queue.get(queue_id), dict):
         queue = queue[queue_id]
     if not isinstance(queue, dict):
@@ -127,10 +130,13 @@ async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
     limit = min(QUEUE_WINDOW, max(0, total - start)) if total > 0 else 0
     items: list[dict[str, Any]] = []
     if limit:
-        page = await mass.send_command(
-            "player_queues/items",
-            {"queue_id": queue_id, "limit": limit, "offset": start},
-        )
+        try:
+            page = await mass.send_command(
+                "player_queues/items",
+                {"queue_id": queue_id, "limit": limit, "offset": start},
+            )
+        except Exception as err:
+            raise RuntimeError(f"player_queues/items: {err}") from err
         if isinstance(page, list):
             items = page
     normalized = _item_list(queue, items, start)
