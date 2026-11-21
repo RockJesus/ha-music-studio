@@ -85,6 +85,10 @@ def _queue_item(item: dict[str, Any], fallback_index: int) -> dict[str, Any]:
         "contentType": str(media.get("media_type") or "music"),
         "uri": str(media.get("uri") or ""),
         "available": bool(item.get("available", True)),
+        "favorite": bool(media.get("favorite", False)),
+        "mediaType": str(media.get("media_type") or ""),
+        "itemId": str(media.get("item_id") or ""),
+        "provider": str(media.get("provider") or ""),
     }
 
 
@@ -171,6 +175,10 @@ async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
         "playback_speed": float(getattr(queue, "playback_speed", 1) or 1),
         "shuffle": bool(getattr(queue, "shuffle_enabled", False)),
         "repeat": str(_enum_value(getattr(queue, "repeat_mode", None), "off")),
+        "autoplay_enabled": bool(getattr(queue, "autoplay_enabled", False)),
+        "crossfade_enabled": bool(getattr(queue, "crossfade_enabled", False)),
+        "smart_fades_active": bool(getattr(queue, "smart_fades_active", False)),
+        "smart_shuffle_active": bool(getattr(queue, "smart_shuffle_active", False)),
         "updated": round(time.time(), 3),
     }
 
@@ -272,6 +280,10 @@ async def async_register_queue_api(hass: HomeAssistant) -> None:
             vol.Optional("repeat"): str,
             vol.Optional("position"): vol.Coerce(float),
             vol.Optional("keep_playing"): bool,
+            vol.Optional("autoplay"): bool,
+            vol.Optional("crossfade"): bool,
+            vol.Optional("favorite"): bool,
+            vol.Optional("item_uri"): str,
         }
     )
     @websocket_api.async_response
@@ -336,6 +348,49 @@ async def async_register_queue_api(hass: HomeAssistant) -> None:
                     queue_id=queue_id,
                     position=float(msg.get("position") or 0),
                 )
+            elif action == "autoplay":
+                result = await mass.send_command(
+                    "player_queues/autoplay",
+                    queue_id=queue_id,
+                    autoplay_enabled=bool(msg.get("autoplay")),
+                )
+            elif action == "crossfade":
+                result = await mass.send_command(
+                    "player_queues/crossfade",
+                    queue_id=queue_id,
+                    crossfade_enabled=bool(msg.get("crossfade")),
+                )
+            elif action == "favorite":
+                uri = str(msg.get("item_uri") or "")
+                if not uri:
+                    snapshot = await _snapshot(mass, queue_id)
+                    active = next((i for i in snapshot.get("items", []) if i.get("active")), {})
+                    uri = str(active.get("contentId") or "")
+                if not uri:
+                    raise ValueError("item_uri is required when no current track is available")
+                result = await mass.send_command(
+                    "music/favorites/set_item",
+                    item=uri,
+                    favorite=bool(msg.get("favorite")),
+                )
+            elif action == "waveform":
+                snapshot = await _snapshot(mass, queue_id)
+                current = snapshot.get("items") or []
+                active = next((i for i in current if i.get("active")), None)
+                if not active:
+                    raise ValueError("no active queue item")
+                item_id = str(active.get("itemId") or "")
+                provider = str(active.get("provider") or "")
+                if not item_id or not provider:
+                    raise ValueError("current track has no stream details")
+                bins = await mass.send_command(
+                    "audio_analysis/wave_form",
+                    item_id=item_id,
+                    provider_instance_id_or_domain=provider,
+                )
+                result = {"item_id": item_id, "bins": list(bins or [])}
+                connection.send_result(msg["id"], {"ok": True, "action": action, "queue_id": queue_id, "result": result})
+                return
             else:
                 raise ValueError(f"unknown queue action: {action}")
             connection.send_result(msg["id"], {"ok": True, "action": action, "queue_id": queue_id, "result": result})
