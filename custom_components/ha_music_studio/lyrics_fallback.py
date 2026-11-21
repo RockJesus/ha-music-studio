@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
+LOGGER = logging.getLogger(__name__)
+
 LRCLIB_SEARCH_URL = "https://lrclib.net/api/search"
 LRCLIB_GET_URL = "https://lrclib.net/api/get"
-USER_AGENT = "HA-Music-Studio/0.7.1 (https://github.com/RockJesus/ha-music-studio)"
+USER_AGENT = "HA-Music-Studio/0.7.2 (https://github.com/RockJesus/ha-music-studio)"
 
 _SPLIT_RE = re.compile(r"\s*(?:/|,|&|;|\bfeat\.?\s+|\bft\.?\s+|\bx\s+)\s*", re.IGNORECASE)
 _BRACKET_RE = re.compile(r"\s*[\(\[].*?[\)\]]\s*")
@@ -125,8 +128,8 @@ async def fetch_lrclib_lyrics(
                     pair = _lyrics_pair(data)
                     if pair[0] or pair[1]:
                         return pair
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as err:  # noqa: BLE001
+        LOGGER.debug("LRCLIB get failed for %s: %s", title, err)
 
     tokens = artist_tokens(artist)
     search_artists = [tokens[0]] if tokens else ([] if not artist else [artist])
@@ -141,7 +144,8 @@ async def fetch_lrclib_lyrics(
                 if response.status != 200:
                     continue
                 data = await response.json(content_type=None)
-        except Exception:  # noqa: BLE001
+        except Exception as err:  # noqa: BLE001
+            LOGGER.debug("LRCLIB search failed for %s: %s", title, err)
             continue
         picked = pick_lrclib_candidate(data, title, artist, duration)
         if picked:
