@@ -222,7 +222,9 @@ class LyricsSession:
         self._meta: dict[str, Any] = {}
 
     async def start(self) -> None:
-        self._task = self.hass.async_create_task(self._run())
+        self._task = self.hass.async_create_background_task(
+            self._run(), "ha_music_studio lyrics session"
+        )
 
     async def stop(self) -> None:
         self._stopped = True
