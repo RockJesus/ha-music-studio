@@ -19,8 +19,8 @@ from .token import ma_entry
 
 _LOGGER = logging.getLogger(__name__)
 
-QUEUE_WINDOW = 150
-QUEUE_WINDOW_BEFORE = 35
+QUEUE_WINDOW = 60
+QUEUE_WINDOW_BEFORE = 15
 
 
 def _resolve_queue_id(hass: HomeAssistant, entity_id: str | None, queue_id: str | None) -> str:
@@ -201,7 +201,8 @@ class QueueSession:
             self.send({"type": "queue", "queue_id": self.queue_id, "items": [], "total": 0, "error": "Music Assistant unavailable"})
             return
         try:
-            snapshot = await _snapshot(mass, self.queue_id)
+            async with asyncio.timeout(12):
+                snapshot = await _snapshot(mass, self.queue_id)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("queue snapshot failed: %s", err)
             self.send({"type": "queue", "queue_id": self.queue_id, "items": [], "total": 0, "error": str(err)[:160]})
