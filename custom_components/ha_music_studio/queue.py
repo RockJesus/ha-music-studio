@@ -370,8 +370,12 @@ async def async_register_queue_api(hass: HomeAssistant) -> None:
                     raise ValueError("item_uri is required when no current track is available")
                 favorite = bool(msg.get("favorite"))
                 if favorite:
+                    queue = mass.player_queues.get(queue_id)
+                    current = _as_dict(getattr(queue, "current_item", None))
+                    media_item = _as_dict(current.get("media_item"))
                     result = await mass.send_command(
-                        "music/favorites/add_item", item=uri
+                        "music/favorites/add_item",
+                        item=media_item or uri,
                     )
                 else:
                     snapshot = await _snapshot(mass, queue_id)
