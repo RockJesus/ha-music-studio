@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 
 LRCLIB_SEARCH_URL = "https://lrclib.net/api/search"
 LRCLIB_GET_URL = "https://lrclib.net/api/get"
-USER_AGENT = "HA-Music-Studio/0.7.3 (https://github.com/RockJesus/ha-music-studio)"
+USER_AGENT = "HA-Music-Studio/0.7.4 (https://github.com/RockJesus/ha-music-studio)"
 
 _SPLIT_RE = re.compile(r"\s*(?:/|,|&|;|\bfeat\.?\s+|\bft\.?\s+|\bx\s+)\s*", re.IGNORECASE)
 _BRACKET_RE = re.compile(r"\s*[\(\[].*?[\)\]]\s*")

@@ -146,7 +146,9 @@ class SpectrumSession:
         self._stopped = False
 
     async def start(self) -> None:
-        self._task = self.hass.async_create_task(self._run())
+        self._task = self.hass.async_create_background_task(
+            self._run(), "ha_music_studio spectrum session"
+        )
 
     async def stop(self) -> None:
         self._stopped = True
@@ -250,7 +252,9 @@ class SpectrumSession:
                             }
                         )
 
-            pump_task = self.hass.async_create_task(pump())
+            pump_task = self.hass.async_create_background_task(
+                pump(), "ha_music_studio spectrum pump"
+            )
             try:
                 async for msg in ws:
                     if msg.type.name == "BINARY":
