@@ -110,18 +110,30 @@ def _queue_count(value: Any) -> int:
     return 0
 
 
+def _enum_value(value: Any, default: Any = None) -> Any:
+    if value is None:
+        return default
+    return getattr(value, "value", value)
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        result = to_dict()
+        return result if isinstance(result, dict) else {}
+    return {}
+
+
 async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
-    try:
-        queue = await mass.send_command("player_queues/get", queue_id=queue_id)
-    except Exception as err:
-        raise RuntimeError(f"player_queues/get: {err}") from err
-    if isinstance(queue, dict) and isinstance(queue.get(queue_id), dict):
-        queue = queue[queue_id]
-    if not isinstance(queue, dict):
+    # The client keeps queue state from subscriptions; no extra server round-trip is needed.
+    queue = mass.player_queues.get(queue_id)
+    if queue is None:
         return {"queue_id": queue_id, "items": [], "total": 0, "offset": 0}
-    total = _queue_count(queue.get("items"))
-    current_index = queue.get("current_index")
-    current_index = int(current_index) if isinstance(current_index, int) else -1
+    total = max(0, int(getattr(queue, "items", 0) or 0))
+    current_index = getattr(queue, "current_index", None)
+    current_index = current_index if isinstance(current_index, int) else -1
     start = 0
     if current_index >= 0:
         start = max(0, current_index - QUEUE_WINDOW_BEFORE)
@@ -131,18 +143,17 @@ async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
     if limit:
         try:
-            page = await mass.send_command(
-                "player_queues/items", queue_id=queue_id, limit=limit, offset=start
+            page = await mass.player_queues.get_queue_items(
+                queue_id, limit=limit, offset=start
             )
         except Exception as err:
             raise RuntimeError(f"player_queues/items: {err}") from err
-        if isinstance(page, list):
-            items = page
-    normalized = _item_list(queue, items, start)
-    current_item = queue.get("current_item") or {}
+        items = [_as_dict(item) for item in page or []]
+    current_item = _as_dict(getattr(queue, "current_item", None))
+    normalized = _item_list({"current_item": current_item}, items, start)
     return {
         "queue_id": queue_id,
-        "state": str(queue.get("state") or "unknown"),
+        "state": str(_enum_value(getattr(queue, "state", None), "unknown")),
         "items": normalized,
         "total": total or len(normalized),
         "offset": start,
@@ -150,12 +161,16 @@ async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
         "windowed": bool(total and len(normalized) < total),
         "current_index": current_index,
         "current_item_id": str(current_item.get("queue_item_id") or ""),
-        "current_title": str((current_item.get("media_item") or {}).get("name") or current_item.get("name") or ""),
-        "elapsed": round(float(queue.get("elapsed_time") or 0), 2),
+        "current_title": str(
+            _as_dict(current_item.get("media_item")).get("name")
+            or current_item.get("name")
+            or ""
+        ),
+        "elapsed": round(float(getattr(queue, "corrected_elapsed_time", 0) or 0), 2),
         "duration": round(float(current_item.get("duration") or 0), 2),
-        "playback_speed": float(queue.get("playback_speed") or 1),
-        "shuffle": bool(queue.get("shuffle_enabled")),
-        "repeat": str(queue.get("repeat_mode") or "off"),
+        "playback_speed": float(getattr(queue, "playback_speed", 1) or 1),
+        "shuffle": bool(getattr(queue, "shuffle_enabled", False)),
+        "repeat": str(_enum_value(getattr(queue, "repeat_mode", None), "off")),
         "updated": round(time.time(), 3),
     }
 
