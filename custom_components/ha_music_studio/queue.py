@@ -368,11 +368,35 @@ async def async_register_queue_api(hass: HomeAssistant) -> None:
                     uri = str(active.get("contentId") or "")
                 if not uri:
                     raise ValueError("item_uri is required when no current track is available")
-                result = await mass.send_command(
-                    "music/favorites/set_item",
-                    item=uri,
-                    favorite=bool(msg.get("favorite")),
-                )
+                favorite = bool(msg.get("favorite"))
+                if favorite:
+                    result = await mass.send_command(
+                        "music/favorites/add_item", item=uri
+                    )
+                else:
+                    snapshot = await _snapshot(mass, queue_id)
+                    active = next(
+                        (i for i in snapshot.get("items", []) if i.get("active")), {}
+                    )
+                    media_type = str(active.get("mediaType") or "track")
+                    provider = str(active.get("provider") or "")
+                    item_id = str(active.get("itemId") or "")
+                    if not item_id or not provider:
+                        raise ValueError("current track has no provider item id")
+                    library_item = await mass.send_command(
+                        "music/get_library_item",
+                        media_type=media_type,
+                        item_id=item_id,
+                        provider_instance_id_or_domain=provider,
+                    )
+                    if not library_item:
+                        result = {"ok": True, "favorite": False, "already_absent": True}
+                    else:
+                        result = await mass.send_command(
+                            "music/favorites/remove_item",
+                            media_type=media_type,
+                            library_item_id=library_item.get("item_id"),
+                        )
             elif action == "waveform":
                 snapshot = await _snapshot(mass, queue_id)
                 current = snapshot.get("items") or []
