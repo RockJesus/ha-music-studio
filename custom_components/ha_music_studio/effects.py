@@ -165,3 +165,5 @@ async def async_register_effects_api(hass: HomeAssistant) -> None:
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("sound effect failed: %s", err)
             connection.send_error(msg["id"], "sound_effect_failed", str(err)[:200])
+
+    websocket_api.async_register_command(hass, websocket_sound_effect)
