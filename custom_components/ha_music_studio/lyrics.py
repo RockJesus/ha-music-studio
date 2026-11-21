@@ -17,6 +17,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, WS_LYRICS_SUBSCRIBE
+from .lyrics_fallback import fetch_lrclib_lyrics
 from .protocol import envelope
 from .spectrum import _player_for_entity
 from .token import async_get_viewer_token, entry_url, ma_entry
@@ -93,14 +94,35 @@ def _plain_lines(text: str) -> list[str]:
     return [line.strip() for line in (text or "").splitlines() if line.strip()]
 
 
-def _build_entry(lyrics: str | None, lrc_lyrics: str | None) -> dict[str, Any]:
+def _build_entry(
+    lyrics: str | None, lrc_lyrics: str | None, source: str = "Music Assistant"
+) -> dict[str, Any]:
     timed = parse_lrc(lrc_lyrics or "") or parse_lrc(lyrics or "")
     if timed:
-        return {"status": "ready", "lines": timed, "plain": [], "synced": True}
+        return {"status": "ready", "lines": timed, "plain": [], "synced": True, "source": source}
     plain = _plain_lines(lyrics or lrc_lyrics or "")
     if plain:
-        return {"status": "ready", "lines": [], "plain": plain, "synced": False}
-    return {"status": "none", "lines": [], "plain": [], "synced": False}
+        return {"status": "ready", "lines": [], "plain": plain, "synced": False, "source": source}
+    return {"status": "none", "lines": [], "plain": [], "synced": False, "source": source}
+
+
+def _album_text(track: Any) -> str:
+    meta = getattr(track, "metadata", None)
+    album = getattr(meta, "album", None) if meta else None
+    if album is not None:
+        name = getattr(album, "name", None)
+        if name:
+            return str(name)
+        if isinstance(album, str):
+            return album
+    for attr in ("album_name", "album"):
+        value = getattr(track, attr, None)
+        if isinstance(value, str) and value:
+            return value
+        name = getattr(value, "name", None) if value is not None else None
+        if name:
+            return str(name)
+    return ""
 
 
 def _ma_ws_url(url: str) -> str:
@@ -286,7 +308,9 @@ class LyricsSession:
             )
             if self._fetch_task is not None:
                 self._fetch_task.cancel()
-            self._fetch_task = self.hass.async_create_task(self._load(track, key, title, artist))
+            self._fetch_task = self.hass.async_create_task(
+                self._load(track, key, title, artist, _album_text(track), duration)
+            )
         if self._entry is None:
             return
         position = float(
@@ -324,12 +348,20 @@ class LyricsSession:
                 "index": index,
                 "progress": round(progress, 3),
                 "offset": self.offset,
-                "source": "Music Assistant",
+                "source": self._entry.get("source") or "Music Assistant",
                 "errmsg": str(self._entry.get("error") or ""),
             }
         )
 
-    async def _load(self, track: Any, key: str, title: str, artist: str) -> None:
+    async def _load(
+        self,
+        track: Any,
+        key: str,
+        title: str,
+        artist: str,
+        album: str = "",
+        duration: float = 0,
+    ) -> None:
         cache = self.hass.data.setdefault(DOMAIN, {}).setdefault("lyrics_cache", {})
         cached = cache.get(key)
         if cached and cached.get("status") in ("ready", "none"):
@@ -353,6 +385,22 @@ class LyricsSession:
             else:
                 lyrics, lrc_lyrics = None, None
             parsed = _build_entry(lyrics, lrc_lyrics)
+            if not parsed["lines"] and not parsed["plain"]:
+                # MA 的 LRCLIB 匹配要求歌名/歌手/专辑/时长同时接近；
+                # 多歌手写法（A/B）或单曲专辑名常导致明明有歌词却匹配失败。
+                # 这里用宽松匹配补一次：歌名精确 + 首位歌手 + 时长容差。
+                try:
+                    fallback_plain, fallback_lrc = await fetch_lrclib_lyrics(
+                        async_get_clientsession(self.hass),
+                        title,
+                        artist,
+                        album,
+                        duration,
+                    )
+                    if fallback_plain or fallback_lrc:
+                        parsed = _build_entry(fallback_plain, fallback_lrc, "LRCLIB")
+                except Exception as err:  # noqa: BLE001
+                    _LOGGER.debug("LRCLIB fallback failed: %s", err)
             parsed["title"] = title
             parsed["artist"] = artist
             parsed["fetched_at"] = time.time()
