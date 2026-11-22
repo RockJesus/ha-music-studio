@@ -146,7 +146,10 @@ class SendspinProxyView(HomeAssistantView):
         for key, (created, _client_id) in list(tickets.items()):
             if now - created > TICKET_TTL:
                 tickets.pop(key, None)
-        record = tickets.pop(ticket, None)
+        # 配对时 Music Assistant 会主动断开当前 socket，浏览器端 Sendspin
+        # 客户端会用同一个 URL 自动重连。ticket 若一次性作废，重连直接 403，
+        # 配对永远无法完成。这里保留到 TTL 过期，允许同一客户端重连。
+        record = tickets.get(ticket)
         if record is None or now - record[0] > TICKET_TTL:
             return web.Response(status=403, text="invalid or expired ticket")
         client_id = record[1]
