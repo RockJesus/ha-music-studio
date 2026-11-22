@@ -15,9 +15,10 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, WS_LYRICS_SUBSCRIBE
-from .lyrics_fallback import fetch_lrclib_lyrics
+from .lyrics_fallback import fetch_lyrics_multi
 from .protocol import envelope
 from .spectrum import _player_for_entity
 from .token import async_get_viewer_token, entry_url, ma_entry
@@ -123,6 +124,63 @@ def _album_text(track: Any) -> str:
         if name:
             return str(name)
     return ""
+
+
+def _float_attr(value: Any) -> float:
+    """Coerce a state attribute to a non-negative float."""
+    try:
+        return max(0.0, float(value or 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _entity_now_playing(hass: HomeAssistant, entity_id: str | None) -> dict[str, Any] | None:
+    """Build a play context from a plain HA media_player entity.
+
+    Used for players that are not Music Assistant queue players (for example
+    HASS.Agent, Chromecast or TV entities): their state carries title/artist
+    but no MA player id, so lyrics must come from the multi-source lookup.
+    """
+    if not entity_id:
+        return None
+    state = hass.states.get(entity_id)
+    if state is None:
+        return None
+    if str(state.state).lower() in ("unavailable", "unknown", "off", "idle", "standby"):
+        return None
+    attrs = state.attributes
+    title = str(attrs.get("media_title") or "").strip()
+    if not title:
+        return None
+    artist = str(
+        attrs.get("media_artist") or attrs.get("media_album_artist") or ""
+    ).strip()
+    album = str(attrs.get("media_album_name") or attrs.get("media_album") or "").strip()
+    duration = _float_attr(attrs.get("media_duration"))
+    position = _float_attr(attrs.get("media_position"))
+    updated = attrs.get("media_position_updated_at")
+    if updated is not None and position:
+        if isinstance(updated, str):
+            try:
+                updated = dt_util.parse_datetime(updated)
+            except ValueError:
+                updated = None
+        if updated is not None:
+            now = dt_util.utcnow()
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=now.tzinfo)
+            position += max(0.0, (now - updated).total_seconds())
+    if duration:
+        position = min(position, duration)
+    key = "entity|" + "|".join([entity_id, title, artist, str(round(duration or 0))])
+    return {
+        "key": key,
+        "title": title,
+        "artist": artist,
+        "album": album,
+        "duration": duration,
+        "position": position,
+    }
 
 
 def _ma_ws_url(url: str) -> str:
@@ -245,8 +303,14 @@ class LyricsSession:
         entry = ma_entry(self.hass)
         mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
         player = _player_for_entity(self.hass, self.entity_id) or self.requested_player
-        if player or mass is None:
+        if player:
             return player
+        # 实体存在但没有 MA 映射（HASS.Agent / 电视 / 浏览器播放器）时，
+        # 不能借用另一个正在播放的 MA 播放器，否则会显示别人的歌词。
+        if self.entity_id and self.hass.states.get(self.entity_id) is not None:
+            return None
+        if mass is None:
+            return None
         try:
             for candidate in mass.players.players:
                 state = getattr(candidate, "state", None)
@@ -268,30 +332,24 @@ class LyricsSession:
                 self.send({"type": "lyrics_error", "message": f"{err.__class__.__name__}: {err}"[:160]})
             await asyncio.sleep(1.0)
 
-    async def _tick(self) -> None:
-        entry = ma_entry(self.hass)
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
-        if mass is None:
-            self.send({"type": "lyrics", "status": "idle", "lines": [], "plain": []})
-            return
-        player = self._player()
-        if not player:
-            self.send({"type": "lyrics", "status": "idle", "lines": [], "plain": []})
-            return
-        queue = await mass.player_queues.get_active_queue(player)
-        item = getattr(queue, "current_item", None) if queue else None
-        if item is None:
+    def _reset_track(self) -> None:
+        if self._track_key:
             self._track_key = ""
             self._entry = None
-            self.send({"type": "lyrics", "status": "idle", "lines": [], "plain": []})
-            return
-        track = await _resolve_full_track(mass, item)
-        key = _track_key(track)
-        title = str(getattr(track, "name", None) or getattr(item, "name", None) or "")
-        artist = _artist_text(track)
-        duration = float(
-            getattr(item, "duration", None) or getattr(track, "duration", None) or 0
-        )
+            self._meta = {}
+            if self._fetch_task is not None:
+                self._fetch_task.cancel()
+        self.send({"type": "lyrics", "status": "idle", "lines": [], "plain": [], "synced": False})
+
+    async def _publish(
+        self,
+        key: str,
+        title: str,
+        artist: str,
+        duration: float,
+        position: float,
+        loader: Callable[[], Any],
+    ) -> None:
         if key != self._track_key:
             self._track_key = key
             self._entry = None
@@ -310,16 +368,9 @@ class LyricsSession:
             )
             if self._fetch_task is not None:
                 self._fetch_task.cancel()
-            self._fetch_task = self.hass.async_create_task(
-                self._load(track, key, title, artist, _album_text(track), duration)
-            )
+            self._fetch_task = self.hass.async_create_task(loader())
         if self._entry is None:
             return
-        position = float(
-            getattr(queue, "corrected_elapsed_time", None)
-            or getattr(queue, "elapsed_time", None)
-            or 0.0
-        )
         lines = self._entry["lines"]
         index = -1
         progress = 0.0
@@ -353,6 +404,59 @@ class LyricsSession:
                 "source": self._entry.get("source") or "Music Assistant",
                 "errmsg": str(self._entry.get("error") or ""),
             }
+        )
+
+    async def _tick(self) -> None:
+        entry = ma_entry(self.hass)
+        mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
+        player = self._player() if mass is not None else None
+        queue = None
+        item = None
+        if mass is not None and player:
+            try:
+                queue = await mass.player_queues.get_active_queue(player)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("get_active_queue failed: %s", err)
+            item = getattr(queue, "current_item", None) if queue else None
+        if item is not None:
+            track = await _resolve_full_track(mass, item)
+            key = _track_key(track)
+            title = str(getattr(track, "name", None) or getattr(item, "name", None) or "")
+            artist = _artist_text(track)
+            duration = float(
+                getattr(item, "duration", None) or getattr(track, "duration", None) or 0
+            )
+            position = float(
+                getattr(queue, "corrected_elapsed_time", None)
+                or getattr(queue, "elapsed_time", None)
+                or 0.0
+            )
+            await self._publish(
+                key,
+                title,
+                artist,
+                duration,
+                position,
+                lambda: self._load(track, key, title, artist, _album_text(track), duration),
+            )
+            return
+        info = _entity_now_playing(self.hass, self.entity_id)
+        if info is None:
+            self._reset_track()
+            return
+        await self._publish(
+            info["key"],
+            info["title"],
+            info["artist"],
+            info["duration"],
+            info["position"],
+            lambda: self._load_entity(
+                info["key"],
+                info["title"],
+                info["artist"],
+                info["album"],
+                info["duration"],
+            ),
         )
 
     async def _load(
@@ -390,9 +494,9 @@ class LyricsSession:
             if not parsed["lines"] and not parsed["plain"]:
                 # MA 的 LRCLIB 匹配要求歌名/歌手/专辑/时长同时接近；
                 # 多歌手写法（A/B）或单曲专辑名常导致明明有歌词却匹配失败。
-                # 这里用宽松匹配补一次：歌名精确 + 首位歌手 + 时长容差。
+                # 这里再用多源（LRCLIB / 网易云 / QQ / 酷狗）并发补一次。
                 try:
-                    fallback_plain, fallback_lrc = await fetch_lrclib_lyrics(
+                    fallback_plain, fallback_lrc, fallback_source = await fetch_lyrics_multi(
                         async_get_clientsession(self.hass),
                         title,
                         artist,
@@ -400,9 +504,9 @@ class LyricsSession:
                         duration,
                     )
                     if fallback_plain or fallback_lrc:
-                        parsed = _build_entry(fallback_plain, fallback_lrc, "LRCLIB")
+                        parsed = _build_entry(fallback_plain, fallback_lrc, fallback_source)
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.debug("LRCLIB fallback failed: %s", err)
+                    _LOGGER.debug("Multi-source lyrics fallback failed: %s", err)
             parsed["title"] = title
             parsed["artist"] = artist
             parsed["fetched_at"] = time.time()
@@ -427,6 +531,55 @@ class LyricsSession:
                 "fetched_at": time.time(),
             }
             cache[key] = parsed
+        if key == self._track_key:
+            self._entry = parsed
+
+    async def _load_entity(
+        self,
+        key: str,
+        title: str,
+        artist: str,
+        album: str = "",
+        duration: float = 0,
+    ) -> None:
+        """Look up lyrics for a plain HA entity without an MA queue item."""
+        cache = self.hass.data.setdefault(DOMAIN, {}).setdefault("lyrics_cache", {})
+        cached = cache.get(key)
+        if cached and cached.get("status") in ("ready", "none"):
+            self._entry = cached
+            return
+        try:
+            plain, lrc, source = await fetch_lyrics_multi(
+                async_get_clientsession(self.hass),
+                title,
+                artist,
+                album,
+                duration,
+            )
+            parsed = _build_entry(plain, lrc, source or "多源歌词")
+            parsed["title"] = title
+            parsed["artist"] = artist
+            parsed["fetched_at"] = time.time()
+            if not parsed["lines"] and not parsed["plain"]:
+                parsed["status"] = "none"
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Entity lyrics lookup failed: %s", err)
+            parsed = {
+                "error": f"{err.__class__.__name__}: {err}"[:240],
+                "status": "error",
+                "lines": [],
+                "plain": [],
+                "synced": False,
+                "title": title,
+                "artist": artist,
+                "fetched_at": time.time(),
+            }
+        cache[key] = parsed
+        if len(cache) > 80:
+            for old_key in list(cache)[: len(cache) - 80]:
+                cache.pop(old_key, None)
         if key == self._track_key:
             self._entry = parsed
 
