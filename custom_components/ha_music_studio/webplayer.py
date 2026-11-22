@@ -205,6 +205,7 @@ class SendspinProxyView(HomeAssistantView):
         async def client_to_upstream() -> None:
             async for message in client:
                 if message.type == WSMsgType.TEXT:
+                    _LOGGER.debug("sendspin c->u text: %s", str(message.data)[:160])
                     await upstream.send_str(message.data)
                 elif message.type == WSMsgType.BINARY:
                     await upstream.send_bytes(message.data)
@@ -216,11 +217,17 @@ class SendspinProxyView(HomeAssistantView):
         async def upstream_to_client() -> None:
             async for message in upstream:
                 if message.type == WSMsgType.TEXT:
+                    _LOGGER.info("sendspin u->c text: %s", str(message.data)[:160])
                     await client.send_str(message.data)
                 elif message.type == WSMsgType.BINARY:
                     await client.send_bytes(message.data)
                 elif message.type in (WSMsgType.CLOSE, WSMsgType.ERROR):
                     break
+            _LOGGER.info(
+                "sendspin upstream closed code=%s msg=%s",
+                upstream.close_code,
+                str(upstream.exception() or "")[:120],
+            )
             if not client.closed:
                 await client.close()
 
