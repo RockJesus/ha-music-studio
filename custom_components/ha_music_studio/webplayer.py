@@ -193,9 +193,8 @@ class SendspinProxyView(HomeAssistantView):
                     await upstream.close()
                     await client.close(code=1011, message=b"sendspin auth failed")
                     return client
-                # 把 auth_ok 转发给浏览器端 Sendspin 客户端；代理吞掉这条
-                # 会令客户端一直停在握手阶段，MA 注册后很快又标记 unavailable。
-                await client.send_str(auth.data)
+                # auth_ok 只属于这条代理连接，不能转给浏览器 Sendspin 客户端；
+                # 客户端此时正在等待 server/init，收到陌生控制帧会直接断开。
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning("Sendspin proxy auth failed: %s", err)
                 await upstream.close()
@@ -215,15 +214,18 @@ class SendspinProxyView(HomeAssistantView):
                 await upstream.close()
 
         async def upstream_to_client() -> None:
+            frames = 0
             async for message in upstream:
                 if message.type == WSMsgType.TEXT:
-                    _LOGGER.info("sendspin u->c text: %s", str(message.data)[:160])
+                    if frames < 5:
+                        frames += 1
+                        _LOGGER.debug("sendspin u->c text: %s", str(message.data)[:160])
                     await client.send_str(message.data)
                 elif message.type == WSMsgType.BINARY:
                     await client.send_bytes(message.data)
                 elif message.type in (WSMsgType.CLOSE, WSMsgType.ERROR):
                     break
-            _LOGGER.info(
+            _LOGGER.debug(
                 "sendspin upstream closed code=%s msg=%s",
                 upstream.close_code,
                 str(upstream.exception() or "")[:120],
