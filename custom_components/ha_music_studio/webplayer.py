@@ -10,15 +10,19 @@ import time
 from typing import Any
 from urllib.parse import urlparse
 
-from aiohttp import WSMsgType, web
-
 import voluptuous as vol
+from aiohttp import WSMsgType, web
 from homeassistant.components import websocket_api
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN, WS_WEB_PLAYER_EXPOSE, WS_WEB_PLAYER_PAIR, WS_WEB_PLAYER_TICKET
+from .const import (
+    DOMAIN,
+    WS_WEB_PLAYER_EXPOSE,
+    WS_WEB_PLAYER_PAIR,
+    WS_WEB_PLAYER_TICKET,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -318,6 +322,7 @@ async def async_register_web_player_api(hass: HomeAssistant, entry: Any) -> None
         only after the Sendspin session has stayed connected, so Music
         Assistant's config save cannot tear down the freshly paired socket.
         """
+        client_id = str(msg.get("client_id") or "").strip()
         if not client_id:
             connection.send_error(msg["id"], "invalid_client_id", "Invalid client id")
             return
