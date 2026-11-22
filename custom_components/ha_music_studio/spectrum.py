@@ -135,6 +135,10 @@ class BandAnalyzer:
         return {"bands": levels, "peak": max(levels), "rms": 0.0}
 
 
+class _NoSpectrumPlayer(Exception):
+    """Raised when the selected entity has no live Music Assistant player."""
+
+
 class SpectrumSession:
     """One MA relay connection feeding one HA websocket subscriber."""
 
@@ -174,6 +178,11 @@ class SpectrumSession:
                 self._failure_count = 0
             except asyncio.CancelledError:
                 raise
+            except _NoSpectrumPlayer:
+                # 当前实体不是存活的 MA 播放器（HASS.Agent、已删除的 Web 播放器、
+                # 电视等）：频谱没有数据源，安静等待，不连 MA、不打日志。
+                self._failure_count = 0
+                backoff = 5.0
             except Exception as err:  # noqa: BLE001
                 self._failure_count += 1
                 message = str(err)
@@ -211,22 +220,36 @@ class SpectrumSession:
         base = entry_url(entry)
         if not base:
             raise RuntimeError("No Music Assistant URL available")
+        mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
         player = (
             None
             if self._force_auto
             else (_player_for_entity(self.hass, self.entity_id) or self.requested_player)
         )
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
-        if not player and mass is not None:
+        if player and mass is not None:
             try:
-                for candidate in mass.players.players:
-                    state = getattr(candidate, "state", None)
-                    value = getattr(state, "value", state)
-                    if str(value).lower() in ("playing", "playerstate.playing"):
-                        player = candidate.player_id
-                        break
-            except Exception:  # noqa: BLE001
-                player = None
+                live_ids = {item.player_id for item in mass.players.players}
+                if player not in live_ids:
+                    player = None
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("Spectrum player list unavailable: %s", err)
+        if not player:
+            # 实体存在但映射不到存活的 MA 播放器（HASS.Agent、电视、已删除的 Web
+            # 播放器）时，频谱没有数据源：安静退出，不借用别的设备，也不连 MA。
+            if self.entity_id:
+                raise _NoSpectrumPlayer()
+            if mass is not None:
+                try:
+                    for candidate in mass.players.players:
+                        state = getattr(candidate, "state", None)
+                        value = getattr(state, "value", state)
+                        if str(value).lower() in ("playing", "playerstate.playing"):
+                            player = candidate.player_id
+                            break
+                except Exception:  # noqa: BLE001
+                    player = None
+        if not player:
+            raise _NoSpectrumPlayer()
         session = async_get_clientsession(self.hass, verify_ssl=False)
         async with session.ws_connect(
             _ws_url(base, player),
