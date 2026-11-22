@@ -174,7 +174,7 @@ class SpectrumSession:
                 self._failure_count = 0
             except asyncio.CancelledError:
                 raise
-            except Exception as err:
+            except Exception as err:  # noqa: BLE001
                 self._failure_count += 1
                 message = str(err)
                 # 旧 Web 播放器被删除后，原连接会一直拿死 id 重试，MA 只会回

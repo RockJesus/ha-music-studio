@@ -10,8 +10,9 @@ import time
 from typing import Any
 from urllib.parse import urlparse
 
-import voluptuous as vol
 from aiohttp import WSMsgType, web
+
+import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant, callback
@@ -288,7 +289,6 @@ async def async_register_web_player_api(hass: HomeAssistant, entry: Any) -> None
     @websocket_api.async_response
     async def websocket_web_player_pair(hass: HomeAssistant, connection, msg) -> None:
         pairing_token = str(msg.get("pairing_token") or "").strip()
-        client_id = str(msg.get("client_id") or "").strip()
         if not pairing_token or len(pairing_token) > 2048:
             connection.send_error(
                 msg["id"], "invalid_pairing_token", "Invalid pairing token"
@@ -318,7 +318,6 @@ async def async_register_web_player_api(hass: HomeAssistant, entry: Any) -> None
         only after the Sendspin session has stayed connected, so Music
         Assistant's config save cannot tear down the freshly paired socket.
         """
-        client_id = str(msg.get("client_id") or "").strip()
         if not client_id:
             connection.send_error(msg["id"], "invalid_client_id", "Invalid client id")
             return
