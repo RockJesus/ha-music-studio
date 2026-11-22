@@ -52,6 +52,9 @@ def _player_for_entity(hass: HomeAssistant, entity_id: str | None) -> str | None
     state = hass.states.get(entity_id)
     if state is None:
         return None
+    # 实体不可用/未知时，属性里可能仍残留已删除的播放器 id，不能再拿它去连 MA。
+    if str(state.state).lower() in ("unavailable", "unknown"):
+        return None
     for key in ("mass_player_id", "player_id", "ma_player_id", "active_queue"):
         value = state.attributes.get(key)
         if isinstance(value, str) and value:
@@ -142,6 +145,8 @@ class SpectrumSession:
         self.entity_id = entity_id
         self.send = send
         self.requested_player = player
+        self._force_auto = False
+        self._failure_count = 0
         self._task: asyncio.Task | None = None
         self._stopped = False
 
@@ -166,17 +171,35 @@ class SpectrumSession:
             try:
                 await self._connect_once()
                 backoff = 1.0
+                self._failure_count = 0
             except asyncio.CancelledError:
                 raise
-            except Exception:
-                import traceback
-
-                _LOGGER.exception("Spectrum session failed")
-                self.send({"type": "error", "message": traceback.format_exc()[-450:]})
+            except Exception as err:
+                self._failure_count += 1
+                message = str(err)
+                # 旧 Web 播放器被删除后，原连接会一直拿死 id 重试，MA 只会回
+                # "no such player"。第一次遇到就永久退回自动选择当前播放器。
+                if (
+                    "no such player" in message
+                    and not self._force_auto
+                    and (self.requested_player or self.entity_id)
+                ):
+                    self._force_auto = True
+                    _LOGGER.warning(
+                        "Spectrum player for %s no longer exists; falling back to auto",
+                        self.entity_id or self.requested_player,
+                    )
+                    backoff = 1.0
+                elif self._failure_count <= 3:
+                    _LOGGER.warning("Spectrum session failed: %s", message[-220:])
+                else:
+                    _LOGGER.debug("Spectrum session still failing: %s", message[-220:])
+                if self._failure_count <= 3:
+                    self.send({"type": "error", "message": message[-450:]})
             if self._stopped:
                 return
             await asyncio.sleep(backoff)
-            backoff = min(10.0, backoff * 1.6)
+            backoff = min(30.0, backoff * 1.6)
 
     async def _connect_once(self) -> None:
         entry = ma_entry(self.hass)
@@ -188,7 +211,11 @@ class SpectrumSession:
         base = entry_url(entry)
         if not base:
             raise RuntimeError("No Music Assistant URL available")
-        player = _player_for_entity(self.hass, self.entity_id) or self.requested_player
+        player = (
+            None
+            if self._force_auto
+            else (_player_for_entity(self.hass, self.entity_id) or self.requested_player)
+        )
         mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
         if not player and mass is not None:
             try:
