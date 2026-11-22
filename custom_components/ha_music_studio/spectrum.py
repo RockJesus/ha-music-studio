@@ -70,6 +70,9 @@ class BandAnalyzer:
         self._levels = [0.0] * BAND_COUNT
         self._edges = None
         self._window = None
+        # 三频段分界：低 <250Hz，中 250-2000Hz，高 >2000Hz；按实际 log 频段
+        # 取整，避免前端按“柱数三等分”把中低频算进高频。
+        self._zone_split = (BAND_COUNT // 3, (BAND_COUNT * 2) // 3)
         try:
             import numpy as np
 
@@ -78,6 +81,11 @@ class BandAnalyzer:
             freqs = np.fft.rfftfreq(FFT_SIZE, 1 / SAMPLE_RATE)
             self._freqs = freqs
             self._edges = np.geomspace(MIN_FREQ, MAX_FREQ, BAND_COUNT + 1)
+            low_end = int(np.searchsorted(self._edges, 250.0))
+            mid_end = int(np.searchsorted(self._edges, 2000.0))
+            low_end = min(max(1, low_end), BAND_COUNT - 2)
+            mid_end = min(max(low_end + 1, mid_end), BAND_COUNT - 1)
+            self._zone_split = (low_end, mid_end)
         except Exception:  # noqa: BLE001  # pragma: no cover - numpy is present on HAOS
             self._np = None
             _LOGGER.warning("numpy unavailable; spectrum falls back to RMS bands")
@@ -126,13 +134,33 @@ class BandAnalyzer:
         rms = float(np.sqrt(np.mean(x * x)))
         return {
             "bands": [round(v, 3) for v in self._levels],
+            "zones": self._zone_levels(self._levels),
+            "zone_split": list(self._zone_split),
             "peak": round(max(self._levels), 3),
             "rms": round(min(1.0, rms * 2.2), 3),
         }
 
+    def _zone_levels(self, levels: list[float]) -> dict[str, float]:
+        low_end, mid_end = self._zone_split
+
+        def average(values: list[float]) -> float:
+            return round(sum(values) / len(values), 3) if values else 0.0
+
+        return {
+            "low": average(levels[:low_end]),
+            "mid": average(levels[low_end:mid_end]),
+            "high": average(levels[mid_end:]),
+        }
+
     def _fallback(self) -> dict[str, Any]:
         levels = self._levels
-        return {"bands": levels, "peak": max(levels), "rms": 0.0}
+        return {
+            "bands": levels,
+            "zones": self._zone_levels(levels),
+            "zone_split": list(self._zone_split),
+            "peak": max(levels),
+            "rms": 0.0,
+        }
 
 
 class _NoSpectrumPlayer(Exception):
