@@ -44,7 +44,7 @@ def _music_assistant_api_url(target: str) -> str:
 
 async def _music_assistant_api_command(
     hass: HomeAssistant, command: str, args: dict[str, Any], message_id: str
-) -> None:
+) -> Any:
     """Run one authenticated command on the local Music Assistant API."""
     target, token = _music_assistant_connection(hass)
     if not target or not token:
@@ -63,6 +63,12 @@ async def _music_assistant_api_command(
             raise RuntimeError(
                 f"Music Assistant {command} failed ({response.status}): {body[:200]}"
             )
+        if not body:
+            return None
+        try:
+            return json.loads(body)
+        except ValueError:
+            return None
 
 
 async def _pair_web_player(hass: HomeAssistant, pairing_token: str) -> None:
@@ -84,15 +90,27 @@ async def _expose_web_player_to_ha(hass: HomeAssistant, client_id: str) -> None:
     plays through the Home Assistant media_player entity, so the player must be
     exposed there.  This also keeps it visible in Music Assistant's own list.
     """
-    await _music_assistant_api_command(
+    config = await _music_assistant_api_command(
         hass,
         "config/players/save",
         {
             "player_id": client_id,
-            "values": {"expose_to_ha": True, "hide_in_ui": False},
+            # Music Assistant names this config entry "expose_player_to_ha";
+            # a save with an unknown key is silently ignored and never raises
+            # PLAYER_CONFIG_UPDATED, so Home Assistant keeps no entity for it.
+            "values": {
+                "enabled": True,
+                "expose_player_to_ha": True,
+                "hide_in_ui": False,
+            },
         },
         "ha-music-expose",
     )
+    # The save answers with the stored PlayerConfig. Verify the flag landed so
+    # the card can report a real failure instead of "connected, waiting forever".
+    stored = (config or {}).get("values") if isinstance(config, dict) else None
+    if isinstance(stored, dict) and stored.get("expose_player_to_ha") is False:
+        raise RuntimeError("Music Assistant did not accept expose_player_to_ha")
 
 
 
