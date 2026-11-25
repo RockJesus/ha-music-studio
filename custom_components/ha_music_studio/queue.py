@@ -130,6 +130,62 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _stream_details_of(item: Any) -> Any:
+    """Return the streamdetails object/dict of a queue item, whichever form it is in."""
+    if isinstance(item, dict):
+        return item.get("streamdetails") or item.get("stream_details")
+    return getattr(item, "streamdetails", None)
+
+
+def _current_audio(item: Any) -> dict[str, Any] | None:
+    """Return the current item's audio spec plus MA's own bit-perfect verdict.
+
+    MA resolves the full processing chain on the server and stores it on the
+    queue item's streamdetails; the core ``music_assistant/get_queue`` service
+    strips that field, so the fidelity verdict (``bit_perfect``) is only
+    available from the MA client model we hold here.
+    """
+    details = _stream_details_of(item)
+    if details is None:
+        return None
+    audio_format = _as_dict(
+        getattr(details, "audio_format", None)
+        if not isinstance(details, dict)
+        else details.get("audio_format")
+    )
+    if not audio_format:
+        return None
+    processing = (
+        details.get("audio_processing")
+        if isinstance(details, dict)
+        else getattr(details, "audio_processing", None)
+    )
+    bit_perfect: bool | None = None
+    output_format: dict[str, Any] | None = None
+    if processing is not None:
+        chain = _as_dict(processing)
+        verdicts: list[bool] = []
+        for output in chain.get("outputs") or []:
+            if not isinstance(output, dict):
+                continue
+            verdict = (output.get("fidelity") or {}).get("bit_perfect")
+            if verdict is not None:
+                verdicts.append(bool(verdict))
+            if output_format is None and output.get("output_format"):
+                output_format = output["output_format"]
+        if verdicts:
+            # 只有所有输出都没被改样才算比特完美，避免分组播放时误标
+            bit_perfect = all(verdicts)
+    return {
+        "codec": str(_enum_value(audio_format.get("content_type"), "") or ""),
+        "sample_rate": int(audio_format.get("sample_rate") or 0),
+        "bit_depth": int(audio_format.get("bit_depth") or 0),
+        "channels": int(audio_format.get("channels") or 0),
+        "bit_rate": int(audio_format.get("bit_rate") or 0),
+        "bit_perfect": bit_perfect,
+        "output": output_format,
+    }
+
 async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
     # The client keeps queue state from subscriptions; no extra server round-trip is needed.
     queue = mass.player_queues.get(queue_id)
@@ -153,7 +209,8 @@ async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
         except Exception as err:
             raise RuntimeError(f"player_queues/items: {err}") from err
         items = [_as_dict(item) for item in page or []]
-    current_item = _as_dict(getattr(queue, "current_item", None))
+    current_item_obj = getattr(queue, "current_item", None)
+    current_item = _as_dict(current_item_obj)
     normalized = _item_list({"current_item": current_item}, items, start)
     return {
         "queue_id": queue_id,
@@ -165,6 +222,7 @@ async def _snapshot(mass: Any, queue_id: str) -> dict[str, Any]:
         "windowed": bool(total and len(normalized) < total),
         "current_index": current_index,
         "current_item_id": str(current_item.get("queue_item_id") or ""),
+        "current_audio": _current_audio(current_item_obj),
         "current_title": str(
             _as_dict(current_item.get("media_item")).get("name")
             or current_item.get("name")
