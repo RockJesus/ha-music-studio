@@ -93,14 +93,14 @@ def _analyze(image: Any) -> dict[str, Any] | None:
     )
 
     def sat_of(value: float) -> int:
-        return int(round(_clamp(value * 100, 42, 88)))
+        return round(_clamp(value * 100, 42, 88))
 
-    hue1 = int(round(primary["hue"]))
-    hue2 = int(round(secondary["hue"]))
+    hue1 = round(primary["hue"])
+    hue2 = round(secondary["hue"])
     s1 = sat_of(primary["sat"] + 0.08)
     s2 = sat_of(secondary["sat"] + 0.05)
-    l1 = int(round(_clamp(int(round(primary["light"] * 100)) + 12, 46, 66)))
-    l2 = int(round(_clamp(int(round(secondary["light"] * 100)) + 8, 40, 60)))
+    l1 = round(_clamp(round(primary["light"] * 100) + 12, 46, 66))
+    l2 = round(_clamp(round(secondary["light"] * 100) + 8, 40, 60))
 
     return {
         "a1": f"hsl({hue1} {s1}% {l1}%)",
@@ -118,7 +118,7 @@ def _analyze(image: Any) -> dict[str, Any] | None:
 
 async def _async_compute(hass: HomeAssistant, url: str) -> dict[str, Any] | None:
     try:
-        from PIL import Image  # noqa: PLC0415 - 可选依赖，缺失就交给卡片本地兜底
+        from PIL import Image  # 可选依赖，缺失就交给卡片本地兜底
     except Exception:  # noqa: BLE001
         return None
     session = async_get_clientsession(hass, verify_ssl=False)

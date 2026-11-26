@@ -82,7 +82,7 @@ class ProgressSession:
     async def _push(self) -> None:
         entry_mass = None
         try:
-            from .token import ma_entry  # noqa: PLC0415 - 避免循环导入
+            from .token import ma_entry  # 避免循环导入
 
             entry = ma_entry(self.hass)
             entry_mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
