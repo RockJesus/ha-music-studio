@@ -15,6 +15,7 @@ from .browse import async_register_browse_api
 from .const import DOMAIN
 from .diagnostics import async_register_diagnostics
 from .effects import async_register_effects_api
+from .frontend import async_register_card
 from .lyrics import async_register_lyrics_api
 from .probe import async_register_probe
 from .progress import async_register_progress_api
@@ -33,6 +34,7 @@ LEGACY_DOMAIN = "ha_music_analysis"
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a config entry."""
     hass.data.setdefault(DOMAIN, {})
+    await async_register_card(hass)
     async_register_websocket_api(hass)
     async_register_lyrics_api(hass)
     await async_register_queue_api(hass)

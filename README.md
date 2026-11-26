@@ -30,4 +30,12 @@ Upgrade the integration first, then the card. Every WebSocket event carries a `p
 
 Install through Marketplace as an `integration`, restart Home Assistant, then add **HA Music Studio** in Settings → Devices & Services.
 
-The `ha-music` card subscribes automatically when this integration is loaded. Without it, the card keeps playback controls but shows no live spectrum or backend lyrics.
+The `ha-music` card is bundled with this integration (`custom_components/ha_music_studio/www/ha-music.js`) and is registered as a frontend module on startup, so installing the integration is all you need — there is no separate card install step.
+
+### The card is part of this integration
+
+The card talks only to this integration's WebSocket API (queue, progress, palette, spectrum) and is useless without it, so it ships here instead of as a separate HACS plugin. The bundle is served from `/ha_music_studio_files/ha-music.js` with the integration version as cache buster.
+
+If you previously installed the card as a HACS plugin or dropped it into `www/`, remove that dashboard resource: two copies would define the same custom elements twice. The integration detects the old resource, logs a warning, and keeps the bundled copy off until it is gone.
+
+Upgrade the integration first, then hard-refresh the dashboard once so the browser picks up the new bundle.
