@@ -21,6 +21,7 @@ from .const import (
     DOMAIN,
     WS_WEB_PLAYER_EXPOSE,
     WS_WEB_PLAYER_PAIR,
+    WS_WEB_PLAYER_REGISTER,
     WS_WEB_PLAYER_TICKET,
 )
 
@@ -269,6 +270,61 @@ class SendspinProxyView(HomeAssistantView):
         return client
 
 
+def _ma_mass(hass: HomeAssistant) -> Any:
+    """Return the Music Assistant runtime object, if loaded."""
+    for entry in hass.config_entries.async_entries(MA_DOMAIN):
+        mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
+        if mass is not None:
+            return mass
+    return None
+
+
+def _normalize(text: Any) -> str:
+    return " ".join(str(text or "").strip().lower().split())
+
+
+def _find_ma_player(
+    hass: HomeAssistant, client_id: str, name: str
+) -> dict[str, Any] | None:
+    """Locate the browser player in Music Assistant's player list."""
+    mass = _ma_mass(hass)
+    if mass is None:
+        return None
+    target_name = _normalize(name)
+    try:
+        players = list(mass.players.players)
+    except Exception:  # noqa: BLE001
+        return None
+    for player in players:
+        if str(getattr(player, "player_id", "")) == client_id:
+            return {"player_id": client_id, "name": str(getattr(player, "name", "") or "")}
+    if not target_name:
+        return None
+    for player in players:
+        if _normalize(getattr(player, "name", "")) == target_name:
+            return {
+                "player_id": str(getattr(player, "player_id", "") or ""),
+                "name": str(getattr(player, "name", "") or ""),
+            }
+    return None
+
+
+def _find_entity(hass: HomeAssistant, player_id: str, name: str) -> str | None:
+    """Find the Home Assistant media_player backed by this Music Assistant player."""
+    target_name = _normalize(name)
+    for state in hass.states.async_all("media_player"):
+        attrs = state.attributes or {}
+        for key in ("mass_player_id", "player_id", "ma_player_id", "active_queue"):
+            if str(attrs.get(key) or "") == player_id:
+                return state.entity_id
+    if target_name:
+        for state in hass.states.async_all("media_player"):
+            friendly = _normalize(state.attributes.get("friendly_name"))
+            if friendly and (friendly == target_name or friendly.endswith(target_name)):
+                return state.entity_id
+    return None
+
+
 async def async_register_web_player_api(hass: HomeAssistant, entry: Any) -> None:
     """Register the ticket command and the same-origin Sendspin relay."""
     cache = hass.data.setdefault(DOMAIN, {})
@@ -367,4 +423,66 @@ async def async_register_web_player_api(hass: HomeAssistant, entry: Any) -> None
     websocket_api.async_register_command(hass, websocket_web_player_ticket)
     websocket_api.async_register_command(hass, websocket_web_player_pair)
     websocket_api.async_register_command(hass, websocket_web_player_expose)
+
+    @websocket_api.websocket_command(
+        {
+            vol.Required("type"): WS_WEB_PLAYER_REGISTER,
+            vol.Required("client_id"): str,
+            vol.Optional("pairing_token"): str,
+            vol.Optional("name"): str,
+            vol.Optional("timeout"): vol.Coerce(float),
+        }
+    )
+    @websocket_api.async_response
+    async def websocket_web_player_register(hass: HomeAssistant, connection, msg) -> None:
+        """Pair, expose and resolve the entity in one server-side pass.
+
+        卡片以前自己轮询 4×900ms 曝光、再 40×500ms 找实体，App WebView 挂起一次
+        就整轮白跑。现在由集成一次性完成：配对 → 等 MA 挂出播放器 → 曝光 →
+        等 HA 出实体，最后把 player_id / entity_id 一起返回。
+        """
+        client_id = str(msg.get("client_id") or "").strip()
+        if not client_id:
+            connection.send_error(msg["id"], "invalid_client_id", "Invalid client id")
+            return
+        pairing_token = str(msg.get("pairing_token") or "").strip()
+        name = str(msg.get("name") or "").strip()
+        timeout = min(30.0, max(3.0, float(msg.get("timeout") or 12.0)))
+        errors: list[str] = []
+        if pairing_token:
+            try:
+                await _pair_web_player(hass, pairing_token)
+            except Exception as err:  # noqa: BLE001
+                errors.append(f"pair: {str(err)[:120]}")
+
+        deadline = time.monotonic() + timeout
+        found = _find_ma_player(hass, client_id, name)
+        while found is None and time.monotonic() < deadline:
+            await asyncio.sleep(0.4)
+            found = _find_ma_player(hass, client_id, name)
+        player_id = (found or {}).get("player_id") or client_id
+        player_name = (found or {}).get("name") or name
+
+        try:
+            await _expose_web_player_to_ha(hass, player_id)
+        except Exception as err:  # noqa: BLE001
+            errors.append(f"expose: {str(err)[:120]}")
+
+        entity_id = _find_entity(hass, player_id, player_name)
+        hunt_deadline = time.monotonic() + 6.0
+        while entity_id is None and time.monotonic() < hunt_deadline:
+            await asyncio.sleep(0.4)
+            entity_id = _find_entity(hass, player_id, player_name)
+
+        connection.send_result(
+            msg["id"],
+            {
+                "player_id": player_id,
+                "name": player_name,
+                "entity_id": entity_id,
+                "registered": found is not None,
+                "errors": errors,
+            },
+        )
+
     hass.http.register_view(SendspinProxyView(hass, target, token))
