@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.helpers import config_validation as cv
 
+from .browse import async_register_browse_api
 from .const import DOMAIN
 from .diagnostics import async_register_diagnostics
 from .effects import async_register_effects_api
@@ -40,6 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_register_diagnostics(hass)
     await async_register_probe(hass)
     await async_register_web_player_api(hass, entry)
+    await async_register_browse_api(hass)
     _register_cleanup_service(hass)
     _LOGGER.info("HA Music Studio started")
     return True

@@ -12,6 +12,8 @@ WS_WEB_PLAYER_TICKET = "ha_music_studio/web_player_ticket"
 WS_WEB_PLAYER_PAIR = "ha_music_studio/web_player_pair"
 WS_WEB_PLAYER_EXPOSE = "ha_music_studio/web_player_expose"
 WS_WEB_PLAYER_REGISTER = "ha_music_studio/web_player_register"
+WS_BROWSE = "ha_music_studio/browse"
+WS_PLAYLISTS = "ha_music_studio/playlists"
 
 # Target output rate. The MA relay can emit 200-300 waveform frames per second;
 # we deliberately collapse them to a small, steady stream for the frontend.

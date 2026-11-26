@@ -29,6 +29,9 @@ _TIME_RE = re.compile(r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]")
 _OFFSET_RE = re.compile(r"\[offset:([+-]?\d+)\]", re.IGNORECASE)
 
 
+LYRIC_WINDOW_RADIUS = 3
+
+
 def _artist_text(track: Any) -> str:
     artists = getattr(track, "artists", None)
     if artists:
@@ -385,6 +388,17 @@ class LyricsSession:
                 end = times[index + 1] if index + 1 < len(times) else duration
                 if end > start:
                     progress = max(0.0, min(1.0, (target - start) / (end - start)))
+        window = None
+        if lines and index >= 0:
+            start = max(0, index - LYRIC_WINDOW_RADIUS)
+            end = min(len(lines), start + LYRIC_WINDOW_RADIUS * 2 + 1)
+            start = max(0, end - (LYRIC_WINDOW_RADIUS * 2 + 1))
+            window = {
+                "start": start,
+                "end": end,
+                "anchor": index - start,
+                "active": index,
+            }
         self.send(
             {
                 "type": "lyrics",
@@ -400,6 +414,7 @@ class LyricsSession:
                 "duration": round(duration, 2),
                 "index": index,
                 "progress": round(progress, 3),
+                "window": window,
                 "offset": self.offset,
                 "source": self._entry.get("source") or "Music Assistant",
                 "errmsg": str(self._entry.get("error") or ""),
