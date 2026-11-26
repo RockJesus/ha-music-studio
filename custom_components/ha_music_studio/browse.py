@@ -46,8 +46,13 @@ async def _async_browse(
     entity = _entity(hass, entity_id)
     if entity is None or not hasattr(entity, "async_browse_media"):
         raise RuntimeError(f"{entity_id} cannot browse media")
+    # MediaPlayerEntity.async_browse_media 形参顺序是 (media_content_type, media_content_id)，
+    # 位置传参会把两个参数对调，MA 侧就报 Media not found。
     return await asyncio.wait_for(
-        entity.async_browse_media(content_id or None, content_type or None),
+        entity.async_browse_media(
+            media_content_type=content_type or None,
+            media_content_id=content_id or None,
+        ),
         BROWSE_TIMEOUT,
     )
 
