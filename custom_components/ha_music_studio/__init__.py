@@ -16,6 +16,7 @@ from .diagnostics import async_register_diagnostics
 from .effects import async_register_effects_api
 from .lyrics import async_register_lyrics_api
 from .probe import async_register_probe
+from .progress import async_register_progress_api
 from .queue import async_register_queue_api
 from .spectrum import async_register_websocket_api
 from .webplayer import async_register_web_player_api
@@ -34,6 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async_register_websocket_api(hass)
     async_register_lyrics_api(hass)
     await async_register_queue_api(hass)
+    await async_register_progress_api(hass)
     await async_register_effects_api(hass)
     await async_register_diagnostics(hass)
     await async_register_probe(hass)
