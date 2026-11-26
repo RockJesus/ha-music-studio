@@ -485,4 +485,7 @@ async def async_register_web_player_api(hass: HomeAssistant, entry: Any) -> None
             },
         )
 
+    # 命令必须先定义再注册：register 在一次里完成 pair → expose → 找实体
+    websocket_api.async_register_command(hass, websocket_web_player_register)
+
     hass.http.register_view(SendspinProxyView(hass, target, token))
