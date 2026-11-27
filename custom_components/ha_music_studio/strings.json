@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Music Studio",
+        "description": "Sets up the server-side spectrum and queue bridge used by the HA Music card. Only one instance is required."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "HA Music Studio is already set up."
+    }
+  },
+  "services": {
+    "cleanup_legacy": {
+      "name": "Remove retired analysis component",
+      "description": "Deletes the obsolete custom_components/ha_music_analysis directory. This is destructive and requires confirm true.",
+      "fields": {
+        "confirm": {
+          "name": "Confirm",
+          "description": "Must be true to delete the directory."
+        }
+      }
+    }
+  }
+}

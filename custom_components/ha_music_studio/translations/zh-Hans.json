@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Music Studio",
+        "description": "配置 HA Music 卡片使用的服务端频谱与队列桥接，只需添加一次。"
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "HA Music Studio 已经配置过了。"
+    }
+  },
+  "services": {
+    "cleanup_legacy": {
+      "name": "清理已停用的分析组件",
+      "description": "删除已废弃的 custom_components/ha_music_analysis 目录，属于破坏性操作，需要 confirm 为 true。",
+      "fields": {
+        "confirm": {
+          "name": "确认",
+          "description": "必须为 true 才会执行删除。"
+        }
+      }
+    }
+  }
+}
