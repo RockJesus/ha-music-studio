@@ -14,8 +14,8 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN, WS_PLAYER_GROUP, WS_QUEUE_COMMAND, WS_QUEUE_SUBSCRIBE
+from .mass_client import get_mass
 from .protocol import envelope
-from .token import ma_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -261,8 +261,7 @@ class QueueSession:
             await self._push()
 
     async def _push(self) -> None:
-        entry = ma_entry(self.hass)
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
+        mass = get_mass(self.hass)
         if mass is None:
             self.send({"type": "queue", "queue_id": self.queue_id, "items": [], "total": 0, "error": "Music Assistant unavailable"})
             return
@@ -350,8 +349,7 @@ async def async_register_queue_api(hass: HomeAssistant) -> None:
         if not queue_id:
             connection.send_error(msg["id"], "queue_not_found", "No Music Assistant queue for this entity")
             return
-        entry = ma_entry(hass)
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
+        mass = get_mass(hass)
         if mass is None:
             connection.send_error(msg["id"], "ma_unavailable", "Music Assistant client unavailable")
             return
@@ -497,8 +495,7 @@ async def async_register_queue_api(hass: HomeAssistant) -> None:
     )
     @websocket_api.async_response
     async def websocket_player_group(hass: HomeAssistant, connection, msg) -> None:
-        entry = ma_entry(hass)
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
+        mass = get_mass(hass)
         if mass is None:
             connection.send_error(msg["id"], "ma_unavailable", "Music Assistant client unavailable")
             return

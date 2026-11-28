@@ -29,7 +29,6 @@ _LOGGER = logging.getLogger(__name__)
 
 TICKET_TTL = 300
 PROXY_PATH = "/api/ha_music_studio/sendspin"
-MA_DOMAIN = "music_assistant"
 MA_PAIR_COMMAND = "sendspin/pair_web_player"
 
 
@@ -116,27 +115,26 @@ async def _expose_web_player_to_ha(hass: HomeAssistant, client_id: str) -> None:
 
 
 def _music_assistant_connection(hass: HomeAssistant) -> tuple[str, str]:
-    """Return the Music Assistant proxy URL and its access token.
+    """Return the Music Assistant proxy URL and the token from our own entry.
 
     Music Assistant exposes an authenticated ``/sendspin`` websocket on its
-    main webserver port.  That endpoint auto-approves the browser web player,
-    unlike the dedicated 8927 port which requires separate player setup.
+    main webserver port; that endpoint auto-approves the browser web player.
     """
-    for entry in hass.config_entries.async_entries(MA_DOMAIN):
-        data = entry.data
-        raw = str(data.get("url") or "")
-        token = str(data.get("token") or "")
-        if not raw or not token:
-            continue
-        parsed = urlparse(raw)
-        if not parsed.hostname:
-            continue
-        scheme = "wss" if parsed.scheme == "https" else "ws"
-        netloc = parsed.hostname
-        if parsed.port:
-            netloc = f"{netloc}:{parsed.port}"
-        return f"{scheme}://{netloc}/sendspin", token
-    return "", ""
+    from .mass_client import get_mass
+    from .token import entry_url
+
+    url = entry_url(hass) or ""
+    token = str(hass.data.get(DOMAIN, {}).get("token") or "")
+    if not url or not token or get_mass(hass) is None:
+        return "", ""
+    parsed = urlparse(url)
+    if not parsed.hostname:
+        return "", ""
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    netloc = parsed.hostname
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+    return f"{scheme}://{netloc}/sendspin", token
 
 
 class SendspinProxyView(HomeAssistantView):
@@ -271,12 +269,10 @@ class SendspinProxyView(HomeAssistantView):
 
 
 def _ma_mass(hass: HomeAssistant) -> Any:
-    """Return the Music Assistant runtime object, if loaded."""
-    for entry in hass.config_entries.async_entries(MA_DOMAIN):
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
-        if mass is not None:
-            return mass
-    return None
+    """Return this integration's own Music Assistant client."""
+    from .mass_client import get_mass
+
+    return get_mass(hass)
 
 
 def _normalize(text: Any) -> str:

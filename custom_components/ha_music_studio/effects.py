@@ -11,7 +11,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, WS_SOUND_EFFECT
-from .token import ma_entry
+from .mass_client import get_mass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,8 +101,7 @@ async def async_register_effects_api(hass: HomeAssistant) -> None:
     )
     @websocket_api.async_response
     async def websocket_sound_effect(hass: HomeAssistant, connection, msg) -> None:
-        entry = ma_entry(hass)
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
+        mass = get_mass(hass)
         if mass is None:
             connection.send_error(msg["id"], "ma_unavailable", "Music Assistant client unavailable")
             return

@@ -3,8 +3,19 @@
     "step": {
       "user": {
         "title": "HA Music Studio",
-        "description": "Sets up the server-side spectrum and queue bridge used by the HA Music card. Only one instance is required."
+        "description": "Point this at your Music Assistant server and paste a long-lived token created in Music Assistant (Settings → Security → add token). The integration opens its own connection; nothing is borrowed from the Music Assistant integration.",
+        "data": {
+          "url": "Music Assistant URL",
+          "token": "Access token"
+        },
+        "data_description": {
+          "url": "Web server address, e.g. http://192.168.1.21:8095",
+          "token": "Long-lived token created in Music Assistant"
+        }
       }
+    },
+    "error": {
+      "cannot_connect": "Could not connect with that URL and token. Check the address, the token and that Music Assistant is running."
     },
     "abort": {
       "single_instance_allowed": "HA Music Studio is already set up."

@@ -5,7 +5,7 @@ Home Assistant custom integration that taps Music Assistant's real-time PCM wave
 ## What it does
 
 - Connects to the local Music Assistant MilkDrop visualizer relay.
-- Reuses the Music Assistant token already stored by Home Assistant; no token is written to this repository.
+- Opens its own Music Assistant connection (using `music-assistant-client`) with the server URL and a long-lived token you create in Music Assistant; both are stored in your Home Assistant config entry, never in this repository. Nothing is read from the Music Assistant integration's config entry.
 - Collapses the 200–300 fps PCM feed into **30 fps, 48 log-spaced bands**.
 - Pushes the bands over a Home Assistant WebSocket command: `ha_music_studio/subscribe`.
 - Fetches the current track's lyrics through Music Assistant's native `metadata/get_track_lyrics`, parses LRC, and pushes synchronized lines plus the active line index over `ha_music_studio/subscribe_lyrics`.
@@ -22,13 +22,13 @@ Upgrade the integration first, then the card. Every WebSocket event carries a `p
 
 ## Requirements
 
-- Home Assistant with the Music Assistant integration configured.
-- Music Assistant 2.10+ with the MilkDrop visualizer provider available.
+- Music Assistant 2.10+ with the MilkDrop visualizer provider available (the Music Assistant *integration* in Home Assistant is optional — this integration talks to Music Assistant directly).
+- A Music Assistant long-lived token: Music Assistant → Settings → Security → create a token.
 - A player that is actually playing; when no player is active the stream stays idle.
 
 ## Install
 
-Install through Marketplace as an `integration`, restart Home Assistant, then add **HA Music Studio** in Settings → Devices & Services.
+Install through Marketplace as an `integration`, restart Home Assistant, then add **HA Music Studio** in Settings → Devices & Services and enter the Music Assistant webserver URL (for example `http://192.168.1.21:8095`) plus the token you created. The entry validates the connection before it is saved; if Music Assistant is down at startup the setup retries automatically.
 
 The `ha-music` card is bundled with this integration (`custom_components/ha_music_studio/www/ha-music.js`) and is registered as a frontend module on startup, so installing the integration is all you need — there is no separate card install step.
 

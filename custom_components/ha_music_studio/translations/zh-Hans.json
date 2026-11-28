@@ -3,11 +3,22 @@
     "step": {
       "user": {
         "title": "HA Music Studio",
-        "description": "配置 HA Music 卡片使用的服务端频谱与队列桥接，只需添加一次。"
+        "description": "填写你的 Music Assistant 服务器地址，并粘贴在 Music Assistant 中创建的长期令牌（设置 → 安全 → 新建令牌）。集成会自建连接，不借用 Music Assistant 集成的任何凭证。",
+        "data": {
+          "url": "Music Assistant 地址",
+          "token": "访问令牌"
+        },
+        "data_description": {
+          "url": "Web 服务地址，例如 http://192.168.1.21:8095",
+          "token": "在 Music Assistant 中创建的长期令牌"
+        }
       }
     },
+    "error": {
+      "cannot_connect": "用这个地址和令牌连不上，请检查地址、令牌以及 Music Assistant 是否在运行。"
+    },
     "abort": {
-      "single_instance_allowed": "HA Music Studio 已经配置过了。"
+      "single_instance_allowed": "HA Music Studio 已经添加过了。"
     }
   }
 }

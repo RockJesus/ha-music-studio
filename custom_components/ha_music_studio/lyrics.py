@@ -19,9 +19,10 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, WS_LYRICS_SUBSCRIBE
 from .lyrics_fallback import fetch_lyrics_multi
+from .mass_client import get_mass
 from .protocol import envelope
 from .spectrum import _player_for_entity
-from .token import async_get_viewer_token, entry_url, ma_entry
+from .token import async_get_viewer_token, entry_url
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -199,8 +200,8 @@ def _ma_ws_url(url: str) -> str:
 
 async def _fetch_lyrics_ws(hass: HomeAssistant, entry: Any, track: Any) -> tuple[str | None, str | None]:
     """Call Music Assistant's metadata command directly over its WebSocket API."""
-    token = await async_get_viewer_token(hass, entry)
-    base = entry_url(entry)
+    token = await async_get_viewer_token(hass)
+    base = entry_url(hass)
     if not token or not base:
         raise RuntimeError("Music Assistant token or URL unavailable")
     if hasattr(track, "to_dict"):
@@ -303,8 +304,7 @@ class LyricsSession:
         self._task = None
 
     def _player(self) -> str | None:
-        entry = ma_entry(self.hass)
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
+        mass = get_mass(self.hass)
         player = _player_for_entity(self.hass, self.entity_id) or self.requested_player
         if player:
             return player
@@ -422,8 +422,7 @@ class LyricsSession:
         )
 
     async def _tick(self) -> None:
-        entry = ma_entry(self.hass)
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
+        mass = get_mass(self.hass)
         player = self._player() if mass is not None else None
         queue = None
         item = None
@@ -488,8 +487,7 @@ class LyricsSession:
         if cached and cached.get("status") in ("ready", "none"):
             self._entry = cached
             return
-        entry = ma_entry(self.hass)
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None) if entry else None
+        mass = get_mass(self.hass)
         if mass is None:
             return
         try:

@@ -19,6 +19,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN
+from .mass_client import get_mass
 from .palette import async_palette
 from .protocol import envelope
 from .queue import _as_dict, _enum_value, _image_url, _resolve_queue_id
@@ -80,14 +81,7 @@ class ProgressSession:
             await self._push()
 
     async def _push(self) -> None:
-        entry_mass = None
-        try:
-            from .token import ma_entry  # 避免循环导入
-
-            entry = ma_entry(self.hass)
-            entry_mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("progress: MA entry unavailable: %s", err)
+        entry_mass = get_mass(self.hass)
         if entry_mass is None:
             return
         try:

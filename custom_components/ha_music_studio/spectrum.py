@@ -23,8 +23,9 @@ from .const import (
     SAMPLE_RATE,
     WS_SUBSCRIBE,
 )
+from .mass_client import get_mass
 from .protocol import envelope
-from .token import async_get_viewer_token, entry_url, ma_entry
+from .token import async_get_viewer_token, entry_url
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -239,16 +240,13 @@ class SpectrumSession:
             backoff = min(30.0, backoff * 1.6)
 
     async def _connect_once(self) -> None:
-        entry = ma_entry(self.hass)
-        if entry is None:
-            raise RuntimeError("Music Assistant integration is not loaded")
-        token = await async_get_viewer_token(self.hass, entry)
+        token = await async_get_viewer_token(self.hass)
         if not token:
             raise RuntimeError("No Music Assistant token available")
-        base = entry_url(entry)
+        base = entry_url(self.hass)
         if not base:
             raise RuntimeError("No Music Assistant URL available")
-        mass = getattr(getattr(entry, "runtime_data", None), "mass", None)
+        mass = get_mass(self.hass)
         player = (
             None
             if self._force_auto
