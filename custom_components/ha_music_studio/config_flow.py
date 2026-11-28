@@ -7,6 +7,11 @@ import logging
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_TOKEN, CONF_URL
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from .const import DOMAIN
 from .mass_client import async_open_client
@@ -47,7 +52,9 @@ class HaMusicStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_URL, default=DEFAULT_URL): str,
-                    vol.Required(CONF_TOKEN): str,
+                    vol.Required(CONF_TOKEN): TextSelector(
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                    ),
                 }
             ),
             errors=errors,

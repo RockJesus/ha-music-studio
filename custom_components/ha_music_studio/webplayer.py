@@ -149,10 +149,8 @@ class SendspinProxyView(HomeAssistantView):
     name = "api:ha_music_studio:sendspin"
     requires_auth = False
 
-    def __init__(self, hass: HomeAssistant, target: str, token: str) -> None:
+    def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
-        self.target = target
-        self.token = token
 
     async def get(self, request: web.Request) -> web.StreamResponse:
         ticket = str(request.query.get("ticket") or "")
@@ -171,6 +169,10 @@ class SendspinProxyView(HomeAssistantView):
             return web.Response(status=403, text="invalid or expired ticket")
         client_id = record[1]
 
+        target, token = _music_assistant_connection(self.hass)
+        if not target or not token:
+            return web.Response(status=503, text="music assistant unavailable")
+
         client = web.WebSocketResponse(
             heartbeat=30, autoping=True, compress=False, max_msg_size=0
         )
@@ -179,7 +181,7 @@ class SendspinProxyView(HomeAssistantView):
         session = async_get_clientsession(self.hass, verify_ssl=False)
         try:
             upstream = await session.ws_connect(
-                self.target,
+                target,
                 heartbeat=30,
                 autoping=True,
                 compress=False,
@@ -192,13 +194,13 @@ class SendspinProxyView(HomeAssistantView):
             await client.close(code=1011, message=b"sendspin upstream unavailable")
             return client
 
-        if self.token:
+        if token:
             try:
                 await upstream.send_str(
                     json.dumps(
                         {
                             "type": "auth",
-                            "token": self.token,
+                            "token": token,
                             "client_id": client_id,
                         }
                     )
@@ -321,15 +323,17 @@ def _find_entity(hass: HomeAssistant, player_id: str, name: str) -> str | None:
     return None
 
 
-async def async_register_web_player_api(hass: HomeAssistant, entry: Any) -> None:
-    """Register the ticket command and the same-origin Sendspin relay."""
+async def async_register_web_player_api(hass: HomeAssistant) -> None:
+    """Register the ticket command and the same-origin Sendspin relay.
+
+    No connection details are captured here: the ticket command and the proxy
+    view both resolve the current URL and token on every request, so removing
+    and re-adding the entry takes effect without a Home Assistant restart.
+    """
     cache = hass.data.setdefault(DOMAIN, {})
     if cache.get("web_player_registered"):
         return
-    target, token = _music_assistant_connection(hass)
     cache["web_player_registered"] = True
-    cache["web_player_target"] = target
-    cache["web_player_token"] = token
 
     @websocket_api.websocket_command(
         {
@@ -339,6 +343,7 @@ async def async_register_web_player_api(hass: HomeAssistant, entry: Any) -> None
     )
     @callback
     def websocket_web_player_ticket(hass: HomeAssistant, connection, msg) -> None:
+        target, token = _music_assistant_connection(hass)
         if not target or not token:
             connection.send_error(
                 msg["id"],
@@ -484,4 +489,4 @@ async def async_register_web_player_api(hass: HomeAssistant, entry: Any) -> None
     # 命令必须先定义再注册：register 在一次里完成 pair → expose → 找实体
     websocket_api.async_register_command(hass, websocket_web_player_register)
 
-    hass.http.register_view(SendspinProxyView(hass, target, token))
+    hass.http.register_view(SendspinProxyView(hass))

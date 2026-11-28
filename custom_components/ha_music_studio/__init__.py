@@ -48,7 +48,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await async_register_queue_api(hass)
         await async_register_progress_api(hass)
         await async_register_effects_api(hass)
-        await async_register_web_player_api(hass, entry)
+        await async_register_web_player_api(hass)
         await async_register_browse_api(hass)
         data["ws_registered"] = True
     _LOGGER.info("HA Music Studio started")
@@ -56,8 +56,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry and close our Music Assistant connection."""
-    client = hass.data.get(DOMAIN, {}).pop(DATA_CLIENT, None)
+    """Unload the entry, close the connection and forget its credentials."""
+    data = hass.data.get(DOMAIN, {})
+    client = data.pop(DATA_CLIENT, None)
+    data.pop(CONF_URL, None)
+    data.pop(CONF_TOKEN, None)
     if client is not None:
         await client.disconnect()
     return True
