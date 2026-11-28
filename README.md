@@ -38,4 +38,6 @@ The card talks only to this integration's WebSocket API (queue, progress, palett
 
 If you previously installed the card as a HACS plugin or dropped it into `www/`, remove that dashboard resource: two copies would define the same custom elements twice. The integration detects the old resource, logs a warning, and keeps the bundled copy off until it is gone.
 
+If an older release left `custom_components/ha_music_analysis` behind, delete that folder yourself (or through Marketplace); this integration only talks to Music Assistant and never removes other integrations' folders.
+
 Upgrade the integration first, then hard-refresh the dashboard once so the browser picks up the new bundle.

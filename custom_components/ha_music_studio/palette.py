@@ -116,9 +116,17 @@ def _analyze(image: Any) -> dict[str, Any] | None:
     }
 
 
+def _decode_and_analyze(data: bytes) -> dict[str, Any] | None:
+    """Decode, resize and sample the artwork off the event loop."""
+    from PIL import Image  # 可选依赖，缺失就交给卡片本地兜底
+
+    image = Image.open(io.BytesIO(data))
+    return _analyze(image)
+
+
 async def _async_compute(hass: HomeAssistant, url: str) -> dict[str, Any] | None:
     try:
-        from PIL import Image  # 可选依赖，缺失就交给卡片本地兜底
+        pass  # 可选依赖，缺失就交给卡片本地兜底
     except Exception:  # noqa: BLE001
         return None
     session = async_get_clientsession(hass, verify_ssl=False)
@@ -133,8 +141,7 @@ async def _async_compute(hass: HomeAssistant, url: str) -> dict[str, Any] | None
     if not data or len(data) > 12 * 1024 * 1024:
         return None
     try:
-        image = Image.open(io.BytesIO(data))
-        return _analyze(image)
+        return await hass.async_add_executor_job(_decode_and_analyze, data)
     except Exception as err:  # noqa: BLE001
         _LOGGER.debug("palette decode failed: %s", str(err)[:120])
         return None

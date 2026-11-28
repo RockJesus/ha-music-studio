@@ -1,6 +1,0 @@
-cleanup_legacy:
-  fields:
-    confirm:
-      required: true
-      selector:
-        boolean:
